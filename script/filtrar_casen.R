@@ -16,6 +16,8 @@ umbral = quantile(casen_rm$ypc, 0.85, na.rm = TRUE)
 casen_clean = casen_rm[casen_rm$ypc <= umbral & (casen_rm$edad > 15) & (casen_rm$edad < 65), ]
 boxplot(casen_clean$ypc)
 hist(casen_clean$ypc, xlab = "Ingreso percapita", col = "green")
+# Creacion de particion de prueba
+# test = ...
 
 # Crear el modelo de regresión multiple y resumir o25
 modelo <- lm(casen_clean$ypc ~ casen_clean$edad + casen_clean$e6a , data = casen_clean)
