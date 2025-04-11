@@ -1,0 +1,36 @@
+---
+title: "Analisis ingreso CASEN"
+author: "Manuel Astroza"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# INTRODUCCION
+
+Este documento consiste en un **analisis descriptivo** del Ingreso del hogar basado en los datos de la encuesta CASEN 2002
+
+```{r libreria, message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+
+Luego cargamos el datset de la CASEN de la RM
+
+```{r ruta, message=FALSE, warning=FALSE}
+ruta_rds = "../data/casen_rm.rds" #../ permite retroceder carpeta
+casen_rm = readRDS(ruta_rds)
+```
+
+# Analisis exploratorio
+
+Vemos un resumen de el ingreso
+
+```{r summary, message=FALSE, warning=FALSE}
+summary(casen_rm$ypc)
+```
+
+El promedio de este datset es de `r mean(casen_rm$ypc, na.rm = TRUE)`
+
+```{r BOXPLOT1, message=FALSE, warning=FALSE, echo=FALSE}
+hist(casen_rm$ypc, xlab = "Ingreso percapita", col = "lightblue")
+boxplot(casen_rm$ypc)
+```
