@@ -3,34 +3,91 @@ title: "Analisis ingreso CASEN"
 author: "Manuel Astroza"
 date: "`r Sys.Date()`"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: sentence
 ---
 
-# INTRODUCCION
+# Introducción.
 
-Este documento consiste en un **analisis descriptivo** del Ingreso del hogar basado en los datos de la encuesta CASEN 2002
+Este documento consiste en un analisis descriptivo del Ingreso del hogar basado en los datos de la encuesta CASEN 2002 Hipotesis: La variable más significativa para la estimación del ingreso es el nivel educacional.
+Objetivo: Conocer
 
 ```{r libreria, message=FALSE, warning=FALSE}
 library(tidyverse)
 ```
-
-Luego cargamos el datset de la CASEN de la RM
 
 ```{r ruta, message=FALSE, warning=FALSE}
 ruta_rds = "../data/casen_rm.rds" #../ permite retroceder carpeta
 casen_rm = readRDS(ruta_rds)
 ```
 
-# Analisis exploratorio
+# Metodología.
 
-Vemos un resumen de el ingreso
+## Selección de variables.
 
-```{r summary, message=FALSE, warning=FALSE}
-summary(casen_rm$ypc)
-```
+La variable independiente a estudiar es el ingreso total del hogar, el cual ya se encuentra corregido en la base de datos.
+Las variables dependientes corresponden a la edad, nivel educacional y número de personas del hogar.
 
-El promedio de este datset es de `r mean(casen_rm$ypc, na.rm = TRUE)`
+-   *ytotcor*: Ingreso total corregido [entero].
+-   *edad*: Edad de la persona, con rango entre 0 y 120 [entero].
+-   *e6a*: Nivel educacional, con valores entre 1 y 15 [entero].
+-   *p9*: N° de personas que viven en el hogar, con valores entre 1 a 30 [entero].
 
-```{r BOXPLOT1, message=FALSE, warning=FALSE, echo=FALSE}
+## Analisis exploratorio.
+
+Para conocer la distribución de valores de una variable se aplican histogramas, con el fin de determinar si las variables tienen un comportamiento normal.
+Por otro lado se aplican diagramas de caja para detectar valores extremos.
+
+```{r hist, message=FALSE, warning=FALSE}
+# Histograma de ingreso per capita original
 hist(casen_rm$ypc, xlab = "Ingreso percapita", col = "lightblue")
-boxplot(casen_rm$ypc)
+boxplot(casen_rm$ytotcor)
 ```
+
+Estos valores afectan de manera negativa una regresion porque alteran la linea de tendencia haciendo que esta se ajuste de peor manera.
+Se presencia un gran conjunto de valores extremos.
+Para eliminarlos se propone trabajar con el 90% de los datos.
+Además se elimanan valores nulos, los cuales son comunes en encuestas de ingreso (pues representan población no activa laboralmente).
+También se filtra la edad, pues el la edad no seria explicativa del ingreso en mayores de 65 años y menores de 15 años.
+Los adultos mayores persiven ingresos de pensiones u ahorros, mientras que menores de 15 años no participan en el mercado de manera formal.
+
+```{r filtro, message=FALSE, warning=FALSE}
+umbral = quantile(casen_rm$ytotcor, 0.9, na.rm = TRUE)
+clean = casen_rm[casen_rm$ytotcor <= umbral & (casen_rm$edad < 65), ]
+hist(clean$ypc, xlab = "Ingreso percapita", col = "green")
+boxplot(clean$ytotcor)
+```
+
+Traz realizar la limpieza, se emplea una matriz de correlación para indicar las variables más explicativas y descartar variables dependeintes autocorrelacionados (lo que afecta a) y aquellas con nula o muy baja correlación con la variable independiente.
+
+```{r corr, message=FALSE, warning=FALSE}
+# Creación de data frame y matriz de correlación
+tabla <- data.frame(clean$ytotcor, clean$edad, clean$e6a, clean$p9)
+correlation_matrix <- cor(tabla, use = "complete.obs", method = "pearson")
+#Gráfica
+corrplot(correlation_matrix, method = "color", tl.cex = 0.8, number.cex = 0.7)
+```
+
+## Modelo de regresión multiple.
+
+Una vez realizada la limpieza se realiza una regresión multiple que permita predecir el ingreso respecto a otras variables.
+`modelo <- lm(clean$ytotcor ~ clean$edad + clean$e6a + clean$p9, data = clean)`
+
+# Resultados.
+
+A partir de la regresión multiple se obtiene las siguientes metricas: `summary(modelo)`
+
+# Analisis.
+
+El valor R\^2 ajustado indica el porcentaje de varianza explicado por el modelo, siendo de 0,26.
+Ello indica que el modelo es impresizo (un buen modelo posee R2 cercano a 1 y un modelo aceptable un R2 entre 0,5 y 0,7) sin embargo en encuestas reales es comun tener R2 muy bajos (menores a 0,1) por lo que el modelo se puede aceptar.
+El p valor menor a 2,2e-16 indica que las variable independientes tienen un efecto significativo en la variable dependiente.
+Luego el t valor permite concer la significancia de cada variable independiente en el ingreso, siendo a mayor valor más significante, con valores de 60,22 para edad, 48,64 para e6a y -9,9 para p9, siendo esta última la variable que menos influye en el modelo.
+
+# Conclusión.
+
+Se concluye que la variable más significativa para predecir el ingreso es la edad, con un t valor = 60,22.
+Por otro lado el modelo de regresión es impreziso con R2 ajustado = 0,26, más puede resultar útil para el estudio considerando que encuestas reales suelen tener valores de R2 ajustado muy bajos.
+Se presentaron dificultades como la selección de variables dependientes, dada la diferencia de cantidad de valores registrados que impiden trabajar con ciertas variables.
+Para obtener mejores modelos de predicción, se podría incorporar otras variables o quitar aquelleas poco significantes como p9 o bien utilizar otro tipo de modelos que incluyan factoreso geográficos como GWR.
