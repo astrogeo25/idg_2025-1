@@ -9,8 +9,8 @@ casen_rm = readRDS(ruta_rds)
 # Reducción del umbral
 umbral = quantile(casen_rm$ytotcor, 0.9, na.rm = TRUE)
 clean = casen_rm[casen_rm$ytotcor <= umbral & (casen_rm$edad < 65), ]
-#hist(clean$ypc, xlab = "Ingreso percapita", col = "green")
-#boxplot(clean$ytotcor)
+hist(clean$ypc, xlab = "Ingreso percapita", col = "green")
+boxplot(clean$ytotcor)
 
 # Creación de data frame y matriz de correlación
 tabla <- data.frame(clean$ytotcor, clean$edad, clean$e6a, clean$p9)
