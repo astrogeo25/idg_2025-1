@@ -1,0 +1,278 @@
+---
+title: "Analisis hogares monoparentales y jefatura femenina en la RM"
+author: "Manuel Astroza"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+# Introducción
+
+El estudio de los hogares monoparentales es fundamental porque permite comprender las dinámicas familiares que afectan tanto el bienestar de los hijos como la situación socioeconómica del hogar. Estos hogares, donde solo uno de los padres está a cargo, enfrentan desafíos particulares, como mayores en la generación de ingresos, pués los hogares biparentales presentan mejores ingresos autónomos: 1,5 veces mayores al de los monoparentales; impactando en la calidad de vida de sus integrantes.
+
+Para los últimos 30 años, se observa que el porcentaje de familias monoparentales aumentó de un 15,6% a un 26,3%, mientras que la proporción de hogares biparentales se redujo de un 71,4% a un 54,1%, alcanzando su mínimo histórico (El Librero, 2024)
+
+La tasa de jefatura femenina en hogares monoparentales es especialmente relevante porque la mayoría de estos hogares están encabezados por mujeres, quienes suelen enfrentar una mayor vulnerabilidad económica.
+
+**Hipótesis**: Los hogares monoparentales con jefas de hogar se presentan en comunas de bajos ingresos.
+
+# Área de estudio
+
+La región metropolitana concentra cerca del 40% de la población nacional y puede ser dividida en zonas norte, centro, sur, oeste y este. Para este estudio se enfocará en entregar una caracterización socioeconómica, que puede ser explicativa para las situaciones de estudio.
+
+- **Zona Norte**: Incluye comunas como Quilicura, Conchalí y Huechuraba. Se caracteriza por un crecimiento urbano acelerado, con una mezcla de sectores industriales y residenciales. Aunque ha habido mejoras en infraestructura, persisten desafíos en acceso a servicios y empleo.
+- **Zona Centro**: Comprende Santiago Centro, Providencia y Recoleta. Es el núcleo financiero y comercial de la región, con una alta concentración de empleo y servicios. Sin embargo, enfrenta problemas de congestión, contaminación y desigualdad en el acceso a vivienda.
+- **Zona Sur**: Comunas como La Pintana y Puente Alto presentan mayores índices de vulnerabilidad social. La pobreza y el acceso limitado a educación y salud son desafíos clave, aunque también hay iniciativas de desarrollo urbano y comunitario.
+- **Zona Oeste**: Incluye Maipú, Pudahuel y Cerro Navia. Es una zona con fuerte crecimiento poblacional y expansión inmobiliaria. A pesar de contar con áreas industriales importantes, la desigualdad en ingresos y acceso a servicios sigue siendo un reto.
+- **Zona Este**: Comunas como Las Condes, Vitacura y Lo Barnechea destacan por su alto nivel socioeconómico. Son sectores con mejor infraestructura, acceso a educación y salud de calidad, aunque también enfrentan problemas como el alto costo de vida y la segregación urbana.
+
+# Marco teórico
+
+Familia monoparental: Aquella constituida por un solo progenitor y sus hijos. (BCN, s.f.).
+
+- **Tasa de hogares monoparentales (%)** = (Hogares monoparentales / Total de hogares)×100
+- Definición SQL: “COUNT(*) FILTER (WHERE p.p08 = 2 AND p.p07 = 1) * 100.0
+    / NULLIF(COUNT(*)”
+- **Tasa de jefatura femenina (%)** = (Total de personas / Viviendas con jefa de hogar mujer​)×100
+- Definición SQL: “COUNT(*) FILTER (WHERE h.tipo_hogar = 2) * 100.0
+    / NULLIF(COUNT(*)”
+
+Dónde:
+- p08: Relación de parentesco jefe/jefa del hogar.
+- p09: Sexo femenino.
+- tipo_hogar = 2: Hogar monoparental.
+
+# Metodología
+
+Las librerías a utilizar son:
+```{r libreria, message=FALSE, warning=FALSE}
+library(biscale)
+library(DBI)
+library(RPostgres)
+library(sf)
+library(ggplot2)
+library(cowplot)
+```
+
+Posterior se configura la base de datos, coincideiendo con paramatros locales establecidos en pgAdmin
+```{r conex, message=FALSE, warning=FALSE}
+# 1. Definir parámetros de conexión
+db_host     = "localhost"       # servidor de BD
+db_port     = 5432                # puerto de escucha
+db_name     = "censo_rm"   # nombre de la base
+db_user     = "postgres"        # usuario de conexión
+db_password = "postgres"        # clave de usuario
+
+# Establecer conexión usando RPostgres
+con = dbConnect(
+  Postgres(),
+  dbname   = db_name,
+  host     = db_host,
+  port     = db_port,
+  user     = db_user,
+  password = db_password
+)
+```
+
+Se definen los indicadores y la geometría espacial utilizando códificación de pdAdmin en variables R
+```{r sql, message=FALSE, warning=FALSE}
+# 2. Definir indicadores SQL
+sql_indicadores = "
+SELECT
+  z.geocodigo::double precision AS geocodigo, c.nom_comuna,
+  ROUND(  -- porcentaje jefatura femenina
+    COUNT(*) FILTER (WHERE p.p08 = 2 AND p.p07 = 1) * 100.0
+    / NULLIF(COUNT(*), 0)
+  , 2) AS jefatura_f,
+  ROUND(  -- porcentaje hogares monoparentales
+    COUNT(*) FILTER (WHERE h.tipo_hogar = 2) * 100.0
+    / NULLIF(COUNT(*), 0)
+  , 2) AS h_monop
+FROM public.personas   AS p
+JOIN public.hogares    AS h ON p.hogar_ref_id    = h.hogar_ref_id
+JOIN public.viviendas  AS v ON h.vivienda_ref_id = v.vivienda_ref_id
+JOIN public.zonas      AS z ON v.zonaloc_ref_id   = z.zonaloc_ref_id
+JOIN public.comunas    AS c ON z.codigo_comuna    = c.codigo_comuna
+GROUP BY z.geocodigo, c.nom_comuna
+ORDER BY jefatura_f DESC;
+"
+# Ejecutar consulta y importar resultados a data.frame en R
+df_indicadores = dbGetQuery(con, sql_indicadores)
+
+# 3. Definir geometría espacial de zonas dentro de Santiago urbano en SQL
+sql_geometria = "
+SELECT
+  geocodigo::double precision AS geocodigo,
+  geom
+FROM dpa.zonas_censales_rm
+WHERE nom_provin = 'SANTIAGO'
+  AND urbano     = 1;
+"
+# Leer la capa espacial directamente desde la BD
+sf_zonas = st_read(con, query = sql_geometria)
+```
+
+Luego se realiza una unión de datos mediante geocodigo
+```{r merge, message=FALSE, warning=FALSE}
+# 4. Merge por geocódigo para obtener un objeto sf con atributos e indicadores
+sf_mapa = merge(
+  x     = sf_zonas,
+  y     = df_indicadores,
+  by    = "geocodigo",
+  all.x = FALSE  # conservar solo combinaciones existentes
+)
+```
+
+Con ello es posible generar dos mapas que muestren mediante degradado de un color ambos índices
+
+```{r mapas, message=FALSE, warning=FALSE}
+# 5. Mapa del % de jefatura femenina: relleno por valor de total_profesionales
+map_total_jefatura = ggplot(sf_mapa) +
+  geom_sf(aes(fill = jefatura_f), color = "#AAAAAA30", size = 0.1) +  
+  labs(
+    title = "Porcentaje de Jefatura femenina",   # título principal
+    fill  = "% Jefatura femenina"                # etiqueta de leyenda
+  ) +
+  theme_minimal()
+
+# Mapa del % de monoparentales: relleno por valor de ptje_mono
+map_h_monop = ggplot(sf_mapa) +
+  geom_sf(aes(fill = h_monop), color = "#AAAAAA30", size = 0.1) +
+  labs(
+    title = "Porcentaje de Hogares monoparentales",
+    fill  = "% Hogares monoparentales"
+  ) +
+  theme_minimal()
+```
+
+El gráfico de dispersión es creado mediante la definicion de medianas
+
+```{r disp, message=FALSE, warning=FALSE}
+# 6. Crear gráfico de dispersión
+# 6.1 Calcular medianas para dividir cuadrantes
+mediana_jefatura = median(sf_mapa$jefatura_f, na.rm = TRUE)
+mediana_mono  = median(sf_mapa$h_monop, na.rm = TRUE)
+
+# 6.2 Crear la variable que indica el cuadrante según comparaciones con medianas
+sf_mapa$cuadrante = with(
+  sf_mapa,
+  ifelse(
+    jefatura_f >= mediana_jefatura & h_monop >= mediana_mono, 'Q1: Alta/Alta',
+    ifelse(
+      jefatura_f <  mediana_jefatura & h_monop >= mediana_mono, 'Q2: Baja/Alta',
+      ifelse(
+        jefatura_f <  mediana_jefatura & h_monop <  mediana_mono, 'Q3: Baja/Baja',
+        'Q4: Alta/Baja'
+      )
+    )
+  )
+)
+
+# 6.3 Definir paleta de colores manual para cada cuadrante
+colores_cuadrantes = c(
+  'Q1: Alta/Alta' = '#08519c',  # alto/alto
+  'Q2: Baja/Alta' = '#6baed6',  # bajo/alto
+  'Q3: Baja/Baja' = '#eff3ff',  # bajo/bajo
+  'Q4: Alta/Baja' = '#bdd7e7'   # alto/bajo
+)
+
+# 6.4 Construir scatterplot con líneas de mediana
+grafico_cuadrantes = ggplot(
+  sf_mapa,
+  aes(
+    x     = jefatura_f,
+    y     = h_monop,
+    color = cuadrante
+  )
+) +
+  geom_point(size = 2) +  # puntos de cada comuna
+  geom_vline(xintercept = mediana_jefatura, linetype = 'dashed', color = 'gray50') +
+  geom_hline(yintercept = mediana_mono,  linetype = 'dashed', color = 'gray50') +
+  scale_color_manual(name = 'Cuadrante', values = colores_cuadrantes) +
+  labs(x = '% Jefatura', y = '% Hogares monoparentales', title = 'Dispersión por Cuadrantes') +
+  theme_minimal()
+```
+
+Utilizando la librería "" se crea un mapa bivariado que clasifca variables según sus porcentajes
+```{r bivar, message=FALSE, warning=FALSE}
+# 7 Crear mapa bivariado
+# 7.1 Obtener geometría comunal para Santiago
+sql_comunas = "
+SELECT cut, nom_comuna, geom
+FROM dpa.comunas_rm_shp
+WHERE nom_provin = 'SANTIAGO';
+"
+sf_comunas_santiago = st_read(con, query = sql_comunas)
+
+# 7.2 Clasificar datos en 3 x 3 bivariado
+sf_mapa_bi = bi_class(sf_mapa, x = jefatura_f, y = h_monop, dim = 3, style = 'jenks')
+
+
+# 7.3 Calcular bbox y centroides para etiquetas comunales
+caja = sf::st_bbox(sf_mapa_bi)
+sf_comunas_centroides = st_centroid(sf_comunas_santiago)
+
+# 7.4 Crear mapa bivariado sin bordes internos y con etiquetas
+mapa_bivariado_etiquetas = ggplot() +
+  geom_sf(data = sf_mapa_bi, aes(fill = bi_class), color = NA, show.legend = FALSE) +
+  geom_sf(data = sf_comunas_santiago, fill = NA, color = 'black', size = 0.4) +
+  geom_sf_text(data = sf_comunas_centroides, aes(label = nom_comuna), size = 2, fontface = 'bold') +
+  bi_scale_fill(pal = 'DkBlue', dim = 3) +
+  labs(title = 'Mapa bivariado para Jefatura femenina vs. Hogar monoparental', subtitle = 'Provincia de Santiago, RM') +
+  coord_sf(xlim = c(caja['xmin'], caja['xmax']), ylim = c(caja['ymin'], caja['ymax']), expand = FALSE) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5, face = 'bold'), plot.subtitle = element_text(hjust = 0.5))
+
+# 7.5 Generar y posicionar leyenda bivariada
+leyenda_bivariada = bi_legend(pal = 'DkBlue', dim = 3, xlab = '% Jefatura femina', ylab = '% Hogar monoparental', size = 8)
+mapa_final = ggdraw() +
+  draw_plot(mapa_bivariado_etiquetas, x = 0,    y = 0,    width = 1,    height = 1) +
+  draw_plot(leyenda_bivariada,          x = 0.75, y = 0.05, width = 0.25, height = 0.25)
+```
+Finalmente se contruye un mapa bivariado
+
+# Resultados
+
+```{r r1, echo=FALSE, message=FALSE, warning=FALSE}
+# Mostrar los mapas en pantalla
+print(map_total_jefatura)
+print(map_h_monop)
+
+# Mostrar gráfico de dispersión
+print(grafico_cuadrantes)
+
+# Mostrar mapa bivariado
+print(mapa_final)
+```
+
+# Análisis
+
+Respecto a las tasas de jefatura femenina se observa mayor concentración de la misma en el centro de Santiago (colores claros) y menores índices en los extremos de la Región, destacando La Pintana y Vitacura, dónde el índice es bajo en toda la comuna y no solo los exteriores.
+
+El índice de hogares monoparentales es más uniforme, más sigue la misma tendencia de disminuir hacia los exteriores. El menor índice con diferencia se registra en La Pintana.
+
+El gráfico de dispersión por cuadrantes confirma la correlación, evidenciando mayores relaciones bajo-bajo y alto-alto entre jefatura femenina y hogares monoparentales. Sin embargo, también es notable la relación alta-baja, indicando que también se presentan casos de jefatura femenina sin ser un hogar monoparental. Estos casos podrían referir a mujeres solteras u hogares sin hijos, lo cuál ha sido tendencia los últimos años.
+
+En el mapa bivariado se observan cuatro grandes tendencias. En el centro (Santiago) los mayores porcentajes de jefatura femenina sin que el hogar sea monoparental. Es posible que muchas mujeres independientes u hogares sin hijos vivan en departamentos, que son comunes en esta zona.
+
+En las zonas Oeste y Norte predomina una correlación entre ambas variables, más ambas presentando porcentajes medios. Estas comunas presentan heterogeneidad económica, con variaciones de ingresos. Es importante destacar que presentan mala conectividad, por lo que deberían ser evaluadas para la implementación de políticas.
+
+La zona centro-Este (Ñuñoa y Providencia) presentan la mayor correlación de las variables. Comunas aledañas al Este y Sur presentan sectores con altos porcentajes de hogares monoparentales pero sin jefatura femenina. Se concluye la alta presencia de hogares monoparentales en los que Ñuñoa y Providencia destacan por tener jefatura femenina.
+La zona Sur-Oeste presenta variaciones en la correlación , más mantiene constante un alto índice de familias monoparentales. Esta zona destaca por poseer bajos ingresos, lo que se traduce en dificultades para la calidad de vida de los jefes y jefas de hogar.
+
+Finalmente en los extremos de las comunas más alejadas del centro se presentan los menores índices de ambas variables correlacionadas, indicando mayor presencia de familias “más tradicionales”.
+
+# Conclusión
+
+El mapa bivariado resulta en una herramienta útil para presenciar la distribución de correlación entre dos variables. Se puede concluir que se evidencia correlación entre porcentajes de jefatura femenina y hogares monoparentales, con altos porcentajes de ambas variables en comunas de ingresos altos como Ñuño y Providencia y con los menores índices en los extremos de la región. Se puede concluir que el fenómeno de estudio es más común tanto en comunas de altos ingresos (zona centro-este) como bajos (zona sur), lo que contradice parcialmente la hipótesis, resultando ser un fenómeno que involucra más variables que la situación económica
+
+También se presentan casos excepcionales como Santiago centro con alto índice de jefatura femenina sin pertenecer a hogares monoparentales, que bien puede referir a mujeres independientes o sin hijos que habiten departamentos o la zona sur-oeste con gran variación.
+
+Para futuros análisis se podría considerar más índices que expliquen estas situaciones.
+
+# Bibliografía
+
+Biblioteca del Congreso Nacional de Chile. (s. f.). La familia. BCN. https://www.bcn.cl/formacioncivica/detalle_guia?h=10221.3/45665
+Lira, J. P. (2024, 10 julio). La estrecha relación entre composición familiar y vulnerabilidad social. El Líbero. https://ellibero.cl/ensayos-asuntos-publicos/la-estrecha-relacion-entre-composicion-familiar-y-vulnerabilidad-social/
