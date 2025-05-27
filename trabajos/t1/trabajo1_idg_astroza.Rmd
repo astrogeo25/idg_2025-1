@@ -98,6 +98,7 @@ JOIN public.comunas    AS c ON z.codigo_comuna    = c.codigo_comuna
 GROUP BY z.geocodigo, c.nom_comuna
 ORDER BY jefatura_f DESC;
 "
+
 # Ejecutar consulta y importar resultados a data.frame en R
 df_indicadores = dbGetQuery(con, sql_indicadores)
 
