@@ -31,7 +31,7 @@ sim_list = lapply(names(cons_censo_comunas), function(zona) {
         by = "ID", all.x = TRUE)
 })
 
-# Data Frame de toda la población
+# Data Frame población
 sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
 
 zonas_ypc = aggregate(
