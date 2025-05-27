@@ -12,7 +12,7 @@ editor_options:
 
 El estudio de los hogares monoparentales es fundamental porque permite comprender las dinámicas familiares que afectan tanto el bienestar de los hijos como la situación socioeconómica del hogar. Estos hogares, donde solo uno de los padres está a cargo, enfrentan desafíos particulares, como mayores en la generación de ingresos, pués los hogares biparentales presentan mejores ingresos autónomos: 1,5 veces mayores al de los monoparentales; impactando en la calidad de vida de sus integrantes.
 
-Para los últimos 30 años, se observa que el porcentaje de familias monoparentales aumentó de un 15,6% a un 26,3%, mientras que la proporción de hogares biparentales se redujo de un 71,4% a un 54,1%, alcanzando su mínimo histórico (El Librero, 2024)
+Para los últimos 30 años, se observa que el porcentaje de familias monoparentales aumentó de un 15,6% a un 26,3%, mientras que la proporción de hogares biparentales se redujo de un 71,4% a un 54,1%, alcanzando su mínimo histórico (El Librero, 2024).
 
 La tasa de jefatura femenina en hogares monoparentales es especialmente relevante porque la mayoría de estos hogares están encabezados por mujeres, quienes suelen enfrentar una mayor vulnerabilidad económica.
 
