@@ -133,11 +133,9 @@ zonas_h7b <- aggregate(
 # Renombrar columnas
 names(zonas_h7b) <- c("geocodigo", "pct_problemas_audicion")
 
-# source("trabajos/t2_microsim/R/conexion_db.R")
-
 con <- dbConnect(
   Postgres(),
-  dbname   = "censo_rm",
+  dbname   = "censo_rm_2017",
   host     = "localhost",
   port     = 5432,
   user     = "postgres",
