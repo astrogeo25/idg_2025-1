@@ -10,21 +10,39 @@ editor_options:
 
 # Intoducción
 
-El estudio de los problemas de audición en la Región Metropolitana es fundamental debido a la alta prevalencia de pérdida auditiva y la exposición significativa a niveles elevados de ruido ambiental en esta zona. La audición es clave para el desarrollo del lenguaje, el aprendizaje y la integración social, especialmente en niños, por lo que detectar y tratar oportunamente los problemas auditivos es esencial para evitar consecuencias negativas en el desarrollo integral y educativo.
+La microsimulación es un método que permite relacionar variables disponibles a nivel comunal, como las que proporciona la Encuesta CASEN, para representarlas a un nivel más desagregado, como el de zona censal. Este proceso consiste en asignar o proyectar características individuales o de hogares observadas en la encuesta a unidades territoriales más pequeñas, aprovechando la información geográfica y sociodemográfica del censo. La microsimulación utiliza técnicas que pueden incluir el "matching" espacial, donde se emparejan observaciones de la encuesta con unidades del censo que comparten características similares, permitiendo así estimar variables en áreas con menor cobertura muestral y mayor detalle territorial.
 
-# Área de estudio basada en niveles de ruido:
+Este método es especialmente útil cuando se desea obtener estimaciones más precisas y detalladas que las que se pueden obtener directamente de la encuesta, debido a limitaciones en el tamaño muestral o en la granularidad de los datos disponibles a nivel comunal.
 
-La Región Metropolitana, y particularmente Santiago, presenta un problema grave de contaminación acústica. Estudios realizados estiman que alrededor de 1.300.000 personas están expuestas a niveles de ruido superiores a 65 dBA, considerados inaceptables según normas internacionales. Este ruido proviene principalmente del tráfico vehicular (aproximadamente 70% del ruido urbano), además del aumento de la industria, comercio, densidad poblacional y características urbanísticas que favorecen la propagación del ruido. Estos niveles elevados de ruido no solo afectan la audición, sino también la concentración, el sueño y pueden provocar alteraciones fisiológicas.
+Para este trabajo se porpone utilizar esta herramienta para obtener informacuón a nivel zona censal de los problemas de audición la población (variable h7a de la CASEN) presentada de manera binaria (1 población sana, 0 población con dificultades) para agrupar de mejor manera las respuestas
 
-# Área de estudio basada en nivel socioeconómico:
+# Justificación de la elección
 
-El impacto del ruido y los problemas auditivos también se relacionan con el nivel socioeconómico, ya que las condiciones de vivienda (como la calidad de aislamiento acústico) y el acceso a servicios de salud auditiva varían según el estrato social. Las zonas con menor nivel socioeconómico suelen tener peores condiciones urbanísticas y menor acceso a atención especializada, lo que dificulta la detección temprana y el tratamiento adecuado de la hipoacusia. Además, la falta de programas de tamizaje universal y la dependencia de la observación por parte de educadores limita la detección en sectores vulnerables.
+La Región Metropolitana es la zona con mayor concentración poblacional y diversidad socioeconómica, lo que implica heterogeneidad en la prevalencia y acceso a servicios de salud visual.
 
-En conclusión, estudiar los problemas de audición en la Región Metropolitana es crucial para diseñar políticas de salud pública que consideren la exposición a altos niveles de ruido y las desigualdades socioeconómicas que afectan la prevención, detección y tratamiento de la pérdida auditiva, especialmente en niños y adultos mayores, para mejorar su calidad de vida y desarrollo social.
+Los problemas de vista son una condición de salud que afecta la calidad de vida y la productividad. En una región con tanta actividad de comercio y transporte es importante cuidar esta condición, pues problemas de visión pueden impactar a un menor rendimiento academico, laboral o bien repercutir en accidentes de tránsito.
+
+La distribución puede variar significativamente dentro de la región, requiriendo un análisis detallado a nivel de zona censal para identificar áreas con mayores necesidades en donde la microsimulación permite captar esta heterogeneidad interna perdida analizar solo a nivel comunal facilitando el diseño de políticas públicas focalizadas en salud visual.
+
+# Area de estudio
+
+Según proyecciones del Instituto Nacional de Estadísticas (INE) para 2025 la región tendrá 8.47 millones de habitantes aproximadamente, representando el 41.9% de la población total del país. La distribución por sexo es equilibrada, con un 50.5% mujeres y 49.5% hombres. En términos de edad, el 16.8% serán menores de 14 años, el 4.8% adolescentes (14-17 años), y un 18% adultos mayores (60 años o más), evidenciando una población con un importante segmento envejecido.
+
+La Región Metropolitana es el principal motor económico del país, concentrando gran parte de la actividad productiva nacional. Destacan sectores como comercio, construcción, servicios profesionales, financieros e industria manufacturera. La región atrae inversiones públicas y privadas que impulsan el desarrollo urbano y económico generando oportunidades laborales diversas.
+
+Los niveles de pobreza son relativamente bajos en comparación con el resto del país, pero con heterogeneidades internas. La pobreza por ingresos en algunas comunas es baja más la pobreza multidimensional (que considera acceso a educación, salud, vivienda y otros servicios) es más dispar ciertos sectores.
+
+Considerando lo anterior se puede dividir geograficamente la región de la siguiente manera.
+
+- Zona Centro: Suele concentrar actividades comerciales y administrativas, con ingresos variables, pero en general presenta un nivel medio de ingresos.
+- Zona Norte: Tiene una mezcla de sectores industriales y residenciales, con ingresos que pueden ser medios a bajos.
+- Zona Sur: Predominan sectores con ingresos medios a bajos, con mayor presencia de población con educación básica incompleta.
+- Zona Este: Es la zona con mayores ingresos promedio, alta escolaridad y mejor acceso a servicios, caracterizada por un nivel socioeconómico alto.
+- Zona Oeste: Presenta ingresos medios a bajos, con una mayor proporción de población con menor nivel educacional y mayor vulnerabilidad social.
 
 # Desarrollo
 
-Para realizar estre trabajo se consideran las siguientes librerias que permite
+Para realizar estre trabajo se consideran las siguientes librerias que permiten conectar con Postgres para una mejor consulta de datos, microsimular y generar mapas.
 
 ```{r libreria, message=FALSE, warning=FALSE}
 # 1. LIBRERÍAS
@@ -32,17 +50,19 @@ library(rakeR)
 library(RPostgres)
 library(DBI)
 library(ggplot2)
+```
 
+El primer paso es leer las encuestas Cneso y CASEN y prepocesar los datos, con el fin de trabajar solo variables de interes por la magnitud de las mismas.
+
+Además se define de manera bineria la variable de estudio según lo mencionado en la introducción.
+
+```{r presocesamiento, message=FALSE, warning=FALSE}
 # 2. ENTRADAS
 
 ## df del censo ya procesado
 cons_censo_df <- readRDS("data/cons_censo_df.rds")
 casen_raw = readRDS("data/casen_rm.rds") 
-```
 
-Se realiza un presocesamiento de datos
-
-```{r presocesamiento, message=FALSE, warning=FALSE}
 # 3. PREPROCESAMIENTO
 
 ## 3.1 CENSO
@@ -63,7 +83,7 @@ casen$esc = as.integer(unclass(casen$esc))
 casen$edad = as.integer(unclass(casen$edad))
 casen$e6a = as.numeric(unclass(casen$e6a))
 casen$sexo = as.integer(unclass(casen$sexo))
-casen$h7a = as.numeric(unclass(casen$h7a)) # Nuevo: visión
+casen$h7a = as.numeric(unclass(casen$h7a))
 casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
 
 idx_na = which(is.na(casen$esc))
@@ -95,10 +115,10 @@ casen$sexo_cat <- factor(
 )
 ```
 
-La microsimulación es una técnica utilizada para modelar y analizar el comportamiento de individuos o unidades pequeñas (como personas, hogares, empresas o vehículos) en sistemas complejos, mediante el uso de computadoras para simular sus decisiones y acciones a lo largo del tiempo.
+Con las variables listas se procede a microsimular la variable h7a a nivel zona censal.
 
 ```{r microsimular, message=FALSE, warning=FALSE}
-# 4. # Microsimulación
+# 4. Microsimulación
 cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
 inds_list = split(casen, casen$Comuna)
 
@@ -127,7 +147,7 @@ zonas_h7a <- aggregate(
   FUN = function(x) {
     total = sum(!is.na(x))
     con_problema = sum(x == 0, na.rm = TRUE)
-    porcentaje = 100 * con_problema / total
+    porcentaje = 100 * con_problema / total # Calculo del porcentaje de personas con problemas de visión
     round(porcentaje, 2)
   }
 )
@@ -135,7 +155,7 @@ zonas_h7a <- aggregate(
 names(zonas_h7a) <- c("geocodigo", "pct_problemas_vision")
 ```
 
-Es importante conectar con
+Una vez microsimulada la variable se conecta con la base de datos del Censo 2017 procesada con Postgis. Esto permite obtener los geocódigos de cada zona censal, necesarios para definir polígonos de un mapa representantivo de la variable de estudio.
 
 ```{r libreria, message=FALSE, warning=FALSE}
 # 5. Conexión con Postgres
@@ -180,7 +200,7 @@ zonas_vision_sf <- st_read(con, query = "
 ```{r mapa, echo=FALSE, message=FALSE, warning=FALSE}
 # 6. Generar mapa
 ggplot(zonas_vision_sf) +
-  geom_sf(aes(fill = vision), color = "black", size = 0.2) +
+  geom_sf(aes(fill = vision), color = "black", size = 0.1) +
   scale_fill_gradient(low = "lightyellow", high = "darkblue", na.value = "grey90",
                       name = "Problemas de Visión (%)") +
   theme_minimal() +
@@ -192,3 +212,14 @@ ggplot(zonas_vision_sf) +
 
 # Analisis
 
+
+
+# Conclusión
+
+
+
+# Bibliografía
+
+Telencuestas. (2023, agosto 29). Población de la Región Metropolitana de Santiago en 2025. Telencuestas. https://telencuestas.com/censos-de-poblacion/chile/2025/metropolitana-de-santiago
+
+Ministerio de Desarrollo Social y Familia. (2020). Índice de prioridad social 2020 [Informe]. Gobierno de Chile. https://www.desarrollosocialyfamilia.gob.cl/storage/docs/boletin_interno/INDICE_DE_PRIORIDAD_SOCIAL_2020(1).pdf
