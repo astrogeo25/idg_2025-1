@@ -13,59 +13,31 @@ casen_raw = readRDS("data/casen_rm.rds")
 # 3. PREPROCESAMIENTO
 
 ## 3.1 CENSO
-# Ordenar y extraer una sola vez los nombres de las columnas de constraints
 col_cons   = sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
-
-# De ahí generar dinámicamente los niveles que luego deben coincidir con los factor levels
-age_levels  = grep("^edad", col_cons, value = TRUE)    # p.ej. "edad_menor_30", "edad_30_40", …
-esc_levels  = grep("^esco", col_cons, value = TRUE)    # p.ej. "esco_0","esco_1_8",…
-sexo_levels = grep("^sexo_",col_cons, value = TRUE)    # p.ej. "sexo_f","sexo_m"
+age_levels  = grep("^edad", col_cons, value = TRUE)
+esc_levels  = grep("^esco", col_cons, value = TRUE)
+sexo_levels = grep("^sexo_",col_cons, value = TRUE)
 
 ## 3.2 CASEN
-# Se seleccionan variables de interés
-
-vars_base = c("estrato", # Para extraer la comuna
-              "esc", # Para escolaridad
-              "edad", 
-              "sexo",
-              "e6a",
-              "h7b") # Variable a microsimular
-
-
-# Se filtra la CASEN con las variables de interés
+vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "h7a") # Cambiado h7b → h7a
 casen = casen_raw[ , vars_base, drop = FALSE]
-
-# Se limpia memoria
 rm(casen_raw)
 
-# Extraemos la comuna
 casen$Comuna = substr(as.character(casen$estrato), 1, 5)
 casen$estrato = NULL
 
-# Se quitan etiquetas haven y se cambian tipos de datos
 casen$esc = as.integer(unclass(casen$esc))
 casen$edad = as.integer(unclass(casen$edad))
 casen$e6a = as.numeric(unclass(casen$e6a))
 casen$sexo = as.integer(unclass(casen$sexo))
-casen$h7b = as.numeric(unclass(casen$h7b)) # Se modifica para el trabajo
-casen$h7b <- ifelse(casen$h7b == 1, 1, 0) # 1 Oyente saludable (h7b=1), 0 oyente con dificultades (h7b=2,3 o 4)
+casen$h7a = as.numeric(unclass(casen$h7a)) # Nuevo: visión
+casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
 
-# Imputación lineal de esc en base a e6a
 idx_na = which(is.na(casen$esc))
-
-# Ajustar modelo con casos en donde no hay na's
 fit = lm(esc ~ e6a, data = casen[-idx_na,])
-
-# Predicción para los casos con NA
 pred = predict(fit, newdata = casen[idx_na, ,drop = FALSE])
-
-# Imputar acotada
 casen$esc[idx_na] = as.integer(round(pmax(0, pmin(29, pred))))
-
-# Le añadimos un ID fijo
 casen$ID = as.character(seq_len(nrow(casen)))
-
-## Recodificamos 
 
 casen$edad_cat <- cut(
   casen$edad,
@@ -89,13 +61,9 @@ casen$sexo_cat <- factor(
   levels = sexo_levels
 )
 
-## Microsimulación
-# crear la lista de constraints POR COMUNA
+# Microsimulación
 cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
-
-# Lista de INDS 
 inds_list = split(casen, casen$Comuna)
-
 
 sim_list = lapply(names(cons_censo_comunas), function(zona) {
   cons_i    = cons_censo_comunas[[zona]]
@@ -106,35 +74,30 @@ sim_list = lapply(names(cons_censo_comunas), function(zona) {
   inds_i = tmp[, c("ID","edad_cat","esc_cat","sexo_cat"), drop = FALSE]
   names(inds_i) = c("ID","Edad","Escolaridad","Sexo")
   
-  
-  
   w_frac  = weight(cons = cons_i, inds = inds_i,
                    vars = c("Edad","Escolaridad","Sexo"))
   sim_i   = integerise(weights = w_frac, inds = inds_i, seed = 123)
   merge(sim_i,
-        tmp[, c("ID","h7b")],
+        tmp[, c("ID","h7a")],  # h7a en vez de h7b
         by = "ID", all.x = TRUE)
 })
 
-# Data Frame de toda la población
 sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
 
-zonas_h7b <- aggregate(
-  h7b ~ zone,
+zonas_h7a <- aggregate(
+  h7a ~ zone,
   data = sim_df,
   FUN = function(x) {
-    total = sum(!is.na(x))                # Total con datos válidos
-    con_problema = sum(x == 0, na.rm = TRUE)  # Problemas de audición
+    total = sum(!is.na(x))
+    con_problema = sum(x == 0, na.rm = TRUE)
     porcentaje = 100 * con_problema / total
-    round(porcentaje, 2)                  # Redondear a 2 decimales
+    round(porcentaje, 2)
   }
 )
 
-# Renombrar columnas
-names(zonas_h7b) <- c("geocodigo", "pct_problemas_audicion")
+names(zonas_h7a) <- c("geocodigo", "pct_problemas_vision")
 
 # 5. Conexión con Postgres
-
 con <- dbConnect(
   Postgres(),
   dbname = "censo_rm_2017",
@@ -144,41 +107,39 @@ con <- dbConnect(
   password = "postgres"
 )
 
-# Escribir tabla temporal con audición y geocodigo
 dbWriteTable(
   conn = con,
-  name = Id(schema = "dpa", table = "tmp_audicion_rm"),
-  value = zonas_h7b,
+  name = Id(schema = "dpa", table = "tmp_vision_rm"),
+  value = zonas_h7a,
   overwrite = TRUE,
   row.names = FALSE
 )
 
-# Crear índice para acelerar joins
-dbExecute(con, "CREATE INDEX ON dpa.tmp_audicion_rm(geocodigo)")
-dbExecute(con, "ANALYZE dpa.tmp_audicion_rm")
+dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_rm(geocodigo)")
+dbExecute(con, "ANALYZE dpa.tmp_vision_rm")
 
 dbExecute(con, "
-  CREATE TABLE dpa.zonas_audicion AS
+  CREATE TABLE dpa.zonas_vision AS
   SELECT
     z.*,
-    t.audicion
+    t.pct_problemas_vision AS vision
   FROM dpa.zonas_censales_rm AS z
-  LEFT JOIN dpa.tmp_audicion_rm AS t
+  LEFT JOIN dpa.tmp_vision_rm AS t
     ON z.geocodigo::text = t.geocodigo
-WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
+  WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
 
-zonas_audicion_sf <- st_read(con, query = "
-  SELECT * FROM dpa.zonas_audicion
+zonas_vision_sf <- st_read(con, query = "
+  SELECT * FROM dpa.zonas_vision
 ")
 
 # 6. Generar mapa
-ggplot(zonas_audicion_sf) +
-  geom_sf(aes(fill = audicion), color = "black", size = 0.2) +
-  scale_fill_gradient(low = "lightyellow", high = "darkgreen", na.value = "grey90",
-                      name = "Problemas de Audición (%)") +
+ggplot(zonas_vision_sf) +
+  geom_sf(aes(fill = vision), color = "black", size = 0.2) +
+  scale_fill_gradient(low = "lightyellow", high = "darkblue", na.value = "grey90",
+                      name = "Problemas de Visión (%)") +
   theme_minimal() +
-  labs(title = "Mapa de Problemas de Audición en la Región Metropolitana",
-       subtitle = "Porcentaje de personas con dificultades auditivas por zona censal") +
+  labs(title = "Mapa de Problemas de Visión en la Región Metropolitana",
+       subtitle = "Porcentaje de personas con dificultades visuales por zona censal") +
   theme(axis.text = element_blank(),
         axis.ticks = element_blank())

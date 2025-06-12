@@ -131,36 +131,51 @@ zonas_h7b <- aggregate(
 )
 
 # Renombrar columnas
-names(zonas_h7b) <- c("geocodigo", "pct_problemas_audicion")
+names(zonas_h7b) <- c("geocodigo", "audicion")
 
 con <- dbConnect(
   Postgres(),
-  dbname   = "censo_rm_2017",
-  host     = "localhost",
-  port     = 5432,
-  user     = "postgres",
+  dbname = "censo_rm_2017",
+  host = "localhost",
+  port = 5432,
+  user = "postgres",
   password = "postgres"
 )
 
+# Escribir tabla temporal con audición y geocodigo
 dbWriteTable(
-  conn      = con,
-  name      = Id(schema = "dpa", table = "tmp_audicion_rm"),
-  value     = zonas_h7b,
+  conn = con,
+  name = Id(schema = "dpa", table = "tmp_audicion_rm"),
+  value = zonas_h7b,
   overwrite = TRUE,
   row.names = FALSE
 )
 
+# Crear índice para acelerar joins
 dbExecute(con, "CREATE INDEX ON dpa.tmp_audicion_rm(geocodigo)")
 dbExecute(con, "ANALYZE dpa.tmp_audicion_rm")
 
-# 1) Crea la nueva capa directamente con un SELECT … LEFT JOIN
 dbExecute(con, "
-  CREATE TABLE dpa.zonas_censales_gs_income AS
+  CREATE TABLE dpa.zonas_audicion AS
   SELECT
     z.*,
-    t.pct_problemas_audicion
+    t.audicion
   FROM dpa.zonas_censales_rm AS z
   LEFT JOIN dpa.tmp_audicion_rm AS t
     ON z.geocodigo::text = t.geocodigo
 WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
+
+zonas_audicion_sf <- st_read(con, query = "
+  SELECT * FROM dpa.zonas_audicion
+")
+
+ggplot(zonas_audicion_sf) +
+  geom_sf(aes(fill = audicion), color = "black", size = 0.2) +
+  scale_fill_gradient(low = "lightyellow", high = "red", na.value = "grey90",
+                      name = "Problemas de Audición (%)") +
+  theme_minimal() +
+  labs(title = "Mapa de Problemas de Audición en la Región Metropolitana",
+       subtitle = "Porcentaje de personas con dificultades auditivas por zona censal") +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
