@@ -1,5 +1,5 @@
 ---
-title: "Analisis hogares monoparentales y jefatura femenina en la RM"
+title: "Analisis problemas visuales en la Región Metropolitana"
 author: "Manuel Astroza"
 date: "`r Sys.Date()`"
 output: html_document
@@ -157,7 +157,7 @@ names(zonas_h7a) <- c("geocodigo", "pct_problemas_vision")
 
 Una vez microsimulada la variable se conecta con la base de datos del Censo 2017 procesada con Postgis. Esto permite obtener los geocódigos de cada zona censal, necesarios para definir polígonos de un mapa representantivo de la variable de estudio.
 
-```{r libreria, message=FALSE, warning=FALSE}
+```{r postgres, message=FALSE, warning=FALSE}
 # 5. Conexión con Postgres
 con <- dbConnect(
   Postgres(),
@@ -211,6 +211,8 @@ ggplot(zonas_vision_sf) +
 ```
 
 # Analisis
+
+Los mayores porcentajes de problemas visuales se acercan al 30%, lo que es considerablemente peligroso para el estilo de vida de ciudad. Por otro lado los valores minimos son cercanos al 2%, por lo que se puede decir que es un problema presente a diferentes escala en toda la región.
 
 
 

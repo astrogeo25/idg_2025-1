@@ -1,16 +1,21 @@
-# 1. LIBRERÍAS
+# 1. Librerías
+# Para simular
 library(rakeR)
 library(RPostgres)
 library(DBI)
 library(ggplot2)
+# Para generar mapas bivariados
+library(biscale)
+library(cowplot)
+library(sf)
 
-# 2. ENTRADAS
+# 2. Entradas
 
 ## df del censo ya procesado
 cons_censo_df <- readRDS("data/cons_censo_df.rds")
 casen_raw = readRDS("data/casen_rm.rds") 
 
-# 3. PREPROCESAMIENTO
+# 3. Preprocesamiento
 
 ## 3.1 CENSO
 col_cons   = sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
@@ -62,7 +67,7 @@ casen$sexo_cat <- factor(
   levels = sexo_levels
 )
 
-# Microsimulación
+# 4. Microsimulación
 cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
 inds_list = split(casen, casen$Comuna)
 
@@ -78,25 +83,32 @@ sim_list = lapply(names(cons_censo_comunas), function(zona) {
   w_frac  = weight(cons = cons_i, inds = inds_i,
                    vars = c("Edad","Escolaridad","Sexo"))
   sim_i   = integerise(weights = w_frac, inds = inds_i, seed = 123)
+  
   merge(sim_i,
-        tmp[, c("ID","h7a")],  # h7a en vez de h7b
+        tmp[, c("ID","h7a","edad")],  # ahora incluye edad
         by = "ID", all.x = TRUE)
 })
 
 sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
 
-zonas_h7a <- aggregate(
-  h7a ~ zone,
+# 4.1 Cálculo de métricas
+
+zonas_stats <- aggregate(
+  cbind(h7a, edad) ~ zone,
   data = sim_df,
-  FUN = function(x) {
-    total = sum(!is.na(x))
-    con_problema = sum(x == 0, na.rm = TRUE)
-    porcentaje = 100 * con_problema / total
-    round(porcentaje, 2)
-  }
+  FUN = function(x) x
 )
 
-names(zonas_h7a) <- c("geocodigo", "pct_problemas_vision")
+zonas_stats <- within(zonas_stats, {
+  pct_problemas_vision = round(100 * sapply(h7a, function(x) sum(x == 0, na.rm = TRUE) / length(x)), 2)
+  pct_mayores_60 = round(100 * sapply(edad, function(x) sum(x >= 60, na.rm = TRUE) / length(x)), 2)
+})
+
+zonas_stats_df <- data.frame(
+  geocodigo = zonas_stats$zone,
+  pct_problemas_vision = zonas_stats$pct_problemas_vision,
+  pct_mayores_60 = zonas_stats$pct_mayores_60
+)
 
 # 5. Conexión con Postgres
 con <- dbConnect(
@@ -108,39 +120,69 @@ con <- dbConnect(
   password = "postgres"
 )
 
+
 dbWriteTable(
   conn = con,
-  name = Id(schema = "dpa", table = "tmp_vision_rm"),
-  value = zonas_h7a,
+  name = Id(schema = "dpa", table = "tmp_vision_vejez_rm"),
+  value = zonas_stats_df,
   overwrite = TRUE,
   row.names = FALSE
 )
 
-dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_rm(geocodigo)")
-dbExecute(con, "ANALYZE dpa.tmp_vision_rm")
+dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
+dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
 
 dbExecute(con, "
-  CREATE TABLE dpa.zonas_vision AS
+  CREATE TABLE dpa.zonas_vision_vejez AS
   SELECT
     z.*,
-    t.pct_problemas_vision AS vision
+    t.pct_problemas_vision AS vision,
+    t.pct_mayores_60 AS vejez
   FROM dpa.zonas_censales_rm AS z
-  LEFT JOIN dpa.tmp_vision_rm AS t
+  LEFT JOIN dpa.tmp_vision_vejez_rm AS t
     ON z.geocodigo::text = t.geocodigo
   WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
 
 zonas_vision_sf <- st_read(con, query = "
-  SELECT * FROM dpa.zonas_vision
+  SELECT * FROM dpa.zonas_vision_vejez
 ")
 
-# 6. Generar mapa
-ggplot(zonas_vision_sf) +
-  geom_sf(aes(fill = vision), color = "black", size = 0.2) +
-  scale_fill_gradient(low = "lightyellow", high = "darkblue", na.value = "grey90",
-                      name = "Problemas de Visión (%)") +
+# 6. Generar mapa bivariado
+
+# 6.1 Preparar los datos con biscale para crear clases bivariadas
+# Usamos las variables pct_mayores_60 (vejez) y pct_problemas_vision (visión)
+zonas_vision_sf <- bi_class(
+  zonas_vision_sf,
+  x = vejez,
+  y = vision,
+  style = "quantile", # o "equal" según prefieras
+  dim = 3             # número de clases por variable (3x3 = 9 clases)
+)
+
+# 6.2 Crear el mapa con ggplot2 usando la clasificación bivariada
+map <- ggplot() +
+  geom_sf(data = zonas_vision_sf, aes(fill = bi_class), color = "white", size = 0.1) +
+  bi_scale_fill(pal = "DkBlue", dim = 3) +  # paleta de colores bivariados
+  labs(
+    title = "Mapa bivariado: Vejez y Problemas de Visión",
+    subtitle = "Región Metropolitana",
+    fill = "Vejez / Problemas de Visión"
+  ) +
   theme_minimal() +
-  labs(title = "Mapa de Problemas de Visión en la Región Metropolitana",
-       subtitle = "Porcentaje de personas con dificultades visuales por zona censal") +
-  theme(axis.text = element_blank(),
-        axis.ticks = element_blank())
+  theme(legend.position = "right")
+
+# 6.3 Crear la leyenda bivariada con biscale
+legend <- bi_legend(pal = "DkBlue",
+                    dim = 3,
+                    xlab = "Vejez",
+                    ylab = "Problemas de visión",
+                    size = 8)
+
+# 6.4 Combinar mapa y leyenda con cowplot
+final_plot <- ggdraw() +
+  draw_plot(map, 0, 0, 1, 1) +
+  draw_plot(legend, 0.75, 0.1, 0.2, 0.2)
+
+# Mostrar el gráfico final
+print(final_plot)
