@@ -170,6 +170,8 @@ zonas_stats_df <- data.frame(
 
 Una vez microsimulada la variable se conecta con la base de datos del Censo 2017 procesada con Postgis. Esto permite obtener los geocódigos de cada zona censal, necesarios para definir polígonos de un mapa representantivo de la variable de estudio.
 
+NOTA: Se debe omitr una parte del código a la segunda ejecución.
+
 ```{r postgres, message=FALSE, warning=FALSE}
 # 5. Conexión con Postgres
 con <- dbConnect(
@@ -193,7 +195,7 @@ dbWriteTable(
 dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
 dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
 
-# Este comando solo se ejecuta una vez, si no se sobrescribe la tabla
+# Este comando solo se ejecuta una vez, omitir a la 2 ejecución
 dbExecute(con, "
   CREATE TABLE dpa.zonas_vision_vejez AS
   SELECT
