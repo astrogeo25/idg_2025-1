@@ -24,6 +24,8 @@ Los problemas de vista son una condición de salud que afecta la calidad de vida
 
 La distribución puede variar significativamente dentro de la región, requiriendo un análisis detallado a nivel de zona censal para identificar áreas con mayores necesidades en donde la microsimulación permite captar esta heterogeneidad interna perdida analizar solo a nivel comunal facilitando el diseño de políticas públicas focalizadas en salud visual.
 
+Así mismo, se realizará una comparativa con la variable edad, calculculando la taza de adultos mayores por zona censal, ya que muchos de estos suelen tener porblemas de visión, así mismo hacer esta distinción nos permitirá conocer si existen zonas en la cual la población joven sea más propensa a presentar estas dificultades.
+
 # Area de estudio
 
 Según proyecciones del Instituto Nacional de Estadísticas (INE) para 2025 la región tendrá 8.47 millones de habitantes aproximadamente, representando el 41.9% de la población total del país. La distribución por sexo es equilibrada, con un 50.5% mujeres y 49.5% hombres. En términos de edad, el 16.8% serán menores de 14 años, el 4.8% adolescentes (14-17 años), y un 18% adultos mayores (60 años o más), evidenciando una población con un importante segmento envejecido.
@@ -45,25 +47,28 @@ Considerando lo anterior se puede dividir geograficamente la región de la sigui
 Para realizar estre trabajo se consideran las siguientes librerias que permiten conectar con Postgres para una mejor consulta de datos, microsimular y generar mapas.
 
 ```{r libreria, message=FALSE, warning=FALSE}
-# 1. LIBRERÍAS
+# 1. Librerías
 library(rakeR)
-library(RPostgres)
+library(RPostgres) # Conexión postgres
 library(DBI)
 library(ggplot2)
+library(biscale) # Mapa bivariado
+library(cowplot)
+library(sf)
 ```
 
 El primer paso es leer las encuestas Cneso y CASEN y prepocesar los datos, con el fin de trabajar solo variables de interes por la magnitud de las mismas.
 
 Además se define de manera bineria la variable de estudio según lo mencionado en la introducción.
 
-```{r presocesamiento, message=FALSE, warning=FALSE}
-# 2. ENTRADAS
+```{r pre, message=FALSE, warning=FALSE}
+# 2. Entradas
 
 ## df del censo ya procesado
-cons_censo_df <- readRDS("data/cons_censo_df.rds")
-casen_raw = readRDS("data/casen_rm.rds") 
+cons_censo_df <- readRDS("cons_censo_df.rds")
+casen_raw = readRDS("casen_rm.rds") 
 
-# 3. PREPROCESAMIENTO
+# 3. Preprocesamiento
 
 ## 3.1 CENSO
 col_cons   = sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
@@ -72,7 +77,7 @@ esc_levels  = grep("^esco", col_cons, value = TRUE)
 sexo_levels = grep("^sexo_",col_cons, value = TRUE)
 
 ## 3.2 CASEN
-vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "h7a") # Cambiado h7b → h7a
+vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")
 casen = casen_raw[ , vars_base, drop = FALSE]
 rm(casen_raw)
 
@@ -83,6 +88,7 @@ casen$esc = as.integer(unclass(casen$esc))
 casen$edad = as.integer(unclass(casen$edad))
 casen$e6a = as.numeric(unclass(casen$e6a))
 casen$sexo = as.integer(unclass(casen$sexo))
+casen$ypc = as.integer(unclass(casen$ypc))
 casen$h7a = as.numeric(unclass(casen$h7a))
 casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
 
@@ -134,25 +140,32 @@ sim_list = lapply(names(cons_censo_comunas), function(zona) {
   w_frac  = weight(cons = cons_i, inds = inds_i,
                    vars = c("Edad","Escolaridad","Sexo"))
   sim_i   = integerise(weights = w_frac, inds = inds_i, seed = 123)
+  
   merge(sim_i,
-        tmp[, c("ID","h7a")],  # h7a en vez de h7b
+        tmp[, c("ID","h7a","edad")],  # ahora incluye edad
         by = "ID", all.x = TRUE)
 })
 
 sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
 
-zonas_h7a <- aggregate(
-  h7a ~ zone,
+# 4.1 Cálculo de métricas
+
+zonas_stats <- aggregate(
+  cbind(h7a, edad) ~ zone,
   data = sim_df,
-  FUN = function(x) {
-    total = sum(!is.na(x))
-    con_problema = sum(x == 0, na.rm = TRUE)
-    porcentaje = 100 * con_problema / total # Calculo del porcentaje de personas con problemas de visión
-    round(porcentaje, 2)
-  }
+  FUN = function(x) x
 )
 
-names(zonas_h7a) <- c("geocodigo", "pct_problemas_vision")
+zonas_stats <- within(zonas_stats, {
+  pct_problemas_vision = round(100 * sapply(h7a, function(x) sum(x == 0, na.rm = TRUE) / length(x)), 2)
+  pct_mayores_60 = round(100 * sapply(edad, function(x) sum(x >= 60, na.rm = TRUE) / length(x)), 2)
+})
+
+zonas_stats_df <- data.frame(
+  geocodigo = zonas_stats$zone,
+  pct_problemas_vision = zonas_stats$pct_problemas_vision,
+  pct_mayores_60 = zonas_stats$pct_mayores_60
+)
 ```
 
 Una vez microsimulada la variable se conecta con la base de datos del Censo 2017 procesada con Postgis. Esto permite obtener los geocódigos de cada zona censal, necesarios para definir polígonos de un mapa representantivo de la variable de estudio.
@@ -168,57 +181,102 @@ con <- dbConnect(
   password = "postgres"
 )
 
+
 dbWriteTable(
   conn = con,
-  name = Id(schema = "dpa", table = "tmp_vision_rm"),
-  value = zonas_h7a,
+  name = Id(schema = "dpa", table = "tmp_vision_vejez_rm"),
+  value = zonas_stats_df,
   overwrite = TRUE,
   row.names = FALSE
 )
 
-dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_rm(geocodigo)")
-dbExecute(con, "ANALYZE dpa.tmp_vision_rm")
+dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
+dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
 
+# Este comando solo se ejecuta una vez, si no se sobrescribe la tabla
 dbExecute(con, "
-  CREATE TABLE dpa.zonas_vision AS
+  CREATE TABLE dpa.zonas_vision_vejez AS
   SELECT
     z.*,
-    t.pct_problemas_vision AS vision
+    t.pct_problemas_vision AS vision,
+    t.pct_mayores_60 AS vejez
   FROM dpa.zonas_censales_rm AS z
-  LEFT JOIN dpa.tmp_vision_rm AS t
+  LEFT JOIN dpa.tmp_vision_vejez_rm AS t
     ON z.geocodigo::text = t.geocodigo
   WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
 
 zonas_vision_sf <- st_read(con, query = "
-  SELECT * FROM dpa.zonas_vision
+  SELECT * FROM dpa.zonas_vision_vejez
 ")
 ```
 
 # Resultados
 
 ```{r mapa, echo=FALSE, message=FALSE, warning=FALSE}
-# 6. Generar mapa
-ggplot(zonas_vision_sf) +
-  geom_sf(aes(fill = vision), color = "black", size = 0.1) +
-  scale_fill_gradient(low = "lightyellow", high = "darkblue", na.value = "grey90",
-                      name = "Problemas de Visión (%)") +
+# 6.1 Preparar los datos con biscale para crear clases bivariadas
+# Usamos las variables pct_mayores_60 (vejez) y pct_problemas_vision (visión)
+zonas_vision_sf <- bi_class(
+  zonas_vision_sf,
+  x = vejez,
+  y = vision,
+  style = "quantile", # o "equal" según prefieras
+  dim = 3             # número de clases por variable (3x3 = 9 clases)
+)
+
+# 6.2 Crear el mapa con ggplot2 usando la clasificación bivariada
+map <- ggplot() +
+  geom_sf(data = zonas_vision_sf, aes(fill = bi_class), color = "black", size = 0.01) +
+  bi_scale_fill(pal = "DkBlue", dim = 3) +  # paleta de colores bivariados
+  labs(
+    title = "Mapa bivariado: Vejez y Problemas de Visión",
+    subtitle = "Región Metropolitana",
+    fill = "Vejez / Problemas de Visión"
+  ) +
   theme_minimal() +
-  labs(title = "Mapa de Problemas de Visión en la Región Metropolitana",
-       subtitle = "Porcentaje de personas con dificultades visuales por zona censal") +
-  theme(axis.text = element_blank(),
-        axis.ticks = element_blank())
+  theme(legend.position = "right")
+
+# 6.3 Crear la leyenda bivariada con biscale
+legend <- bi_legend(pal = "DkBlue",
+                    dim = 3,
+                    xlab = "Vejez",
+                    ylab = "Problemas de visión",
+                    size = 8)
+
+# 6.4 Combinar mapa y leyenda con cowplot
+final_plot <- ggdraw() +
+  draw_plot(map, 0, 0, 1, 1) +
+  draw_plot(legend, 0.75, 0.1, 0.2, 0.2)
+
+# Mostrar el gráfico final
+print(final_plot)
 ```
 
 # Analisis
 
-Los mayores porcentajes de problemas visuales se acercan al 30%, lo que es considerablemente peligroso para el estilo de vida de ciudad. Por otro lado los valores minimos son cercanos al 2%, por lo que se puede decir que es un problema presente a diferentes escala en toda la región.
+Los mayores porcentajes de problemas visuales se acercan al 30%, lo que resulta considerablemente peligroso para el estilo de vida urbano. Por otro lado, los valores mínimos rondan el 2%, por lo que se puede afirmar que se trata de un problema presente a distintas escalas en toda la región.
 
+Tanto la zona norte como la este presentan los menores índices de problemas visuales (colores blanco/celeste). Destaca el caso de Vitacura, donde existe una alta proporción de personas mayores con un bajo índice de problemas de vista. Por su parte, Recoleta sobresale entre las demás comunas por tener los mayores índices de problemas visuales, tanto en población joven como adulta mayor (colores morado/azul). El mejor acceso a servicios de salud, así como educación previenen el desarrollo de problemas visuales.
 
+La zona oeste presenta altos índices de problemas visuales, especialmente entre los adultos mayores, lo que puede deber a déficits en la atención primaria de salud visual de manera general.
+
+La zona centro muestra bajos índices de problemas visuales, especialmente en la comuna de Santiago, lo que se puede explicar por la gran cantidad de centros médicos presentes. Sin embargo, otras comunas cercanas al sur como Estación Central, Pedro Aguirre Cerda, San Miguel y San Joaquín presentan altos índices de problemas visuales, con edades predominantes que varían significativamente. Esto parece denotar importantes diferencias de servicios y acceso a los mismos entre comunas a pesar de su cercanía.
+
+La zona sur es la más heterogénea; por ello, se dividirá en centrosur, sureste y suroeste.
+
+Maipú, en el suroeste, presenta altos índices de problemas visuales, destacándose un sector con alta población mayor (color azul). Más al sur, es la población joven la que presenta estos índices, aunque en menor escala.
+
+En el centrosur, el norte de San Bernardo concentra altos índices tanto de envejecimiento como de problemas visuales, mientras que La Pintana muestra bajas tasas de problemas de visión.
+
+El sureste presenta índices elevados de vejez y problemas visuales en la comuna de La Florida, a diferencia de las comunas aledañas. Además, al este de La Florida, es la población joven la más susceptible a este problema.
+
+En general la zona sur presenta una notable desigualdad incluso dentro de grandes comunas.
 
 # Conclusión
 
+Este estudio permitió correlacionar y visualizar los indices de vejez y problemas visuales de la población de la Región Metropolitana. Se puede concluir que las zonas más afectas son la comuna de Recoleta, toda la zona Oeste y sectores específicos de la zona sur, en los cuales se debería emplear políticas públicas de prevención (para las zonas moradas) y atención médica (para zonas azules).
 
+La microsimulación es de gran ayuda para investigar casos especiales como Maipú o San Bernardo los cuales tienen zonas censales donde agudiza el problema, las cuales pasaría por alto si se estudiara a nivel comuna sin microsimular.
 
 # Bibliografía
 

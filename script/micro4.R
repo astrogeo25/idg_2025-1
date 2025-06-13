@@ -162,7 +162,7 @@ zonas_vision_sf <- bi_class(
 
 # 6.2 Crear el mapa con ggplot2 usando la clasificación bivariada
 map <- ggplot() +
-  geom_sf(data = zonas_vision_sf, aes(fill = bi_class), color = "white", size = 0.1) +
+  geom_sf(data = zonas_vision_sf, aes(fill = bi_class), color = "black", size = 0.01) +
   bi_scale_fill(pal = "DkBlue", dim = 3) +  # paleta de colores bivariados
   labs(
     title = "Mapa bivariado: Vejez y Problemas de Visión",
