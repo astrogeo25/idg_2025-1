@@ -195,9 +195,9 @@ dbWriteTable(
 dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
 dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
 
-# Este comando solo se ejecuta una vez, omitir a la 2 ejecución
+# Crear tabla que agrupe tasas de problemas de visión, adultos mayores por zona censal en PGAdmin
 dbExecute(con, "
-  CREATE TABLE dpa.zonas_vision_vejez AS
+  CREATE TABLE IF NOT EXISTS dpa.zonas_vision_vejez AS
   SELECT
     z.*,
     t.pct_problemas_vision AS vision,

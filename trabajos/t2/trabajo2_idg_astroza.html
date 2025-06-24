@@ -11,7 +11,7 @@
 
 <meta name="author" content="Manuel Astroza" />
 
-<meta name="date" content="2025-06-17" />
+<meta name="date" content="2025-06-24" />
 
 <title>Analisis problemas visuales en la Región Metropolitana</title>
 
@@ -353,7 +353,7 @@ display: none;
 <h1 class="title toc-ignore">Analisis problemas visuales en la Región
 Metropolitana</h1>
 <h4 class="author">Manuel Astroza</h4>
-<h4 class="date">2025-06-17</h4>
+<h4 class="date">2025-06-24</h4>
 
 </div>
 
@@ -590,7 +590,7 @@ dbExecute(con, &quot;CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)&quot;)</
 <pre><code>## [1] 0</code></pre>
 <pre class="r"><code># Este comando solo se ejecuta una vez, omitir a la 2 ejecución
 dbExecute(con, &quot;
-  CREATE TABLE dpa.zonas_vision_vejez AS
+  CREATE TABLE IF NOT EXISTS dpa.zonas_vision_vejez AS
   SELECT
     z.*,
     t.pct_problemas_vision AS vision,
@@ -600,7 +600,7 @@ dbExecute(con, &quot;
     ON z.geocodigo::text = t.geocodigo
   WHERE urbano = 1 AND (nom_provin = &#39;SANTIAGO&#39; OR nom_comuna = &#39;SAN BERNARDO&#39; OR nom_comuna = &#39;PUENTE ALTO&#39;)
 &quot;)</code></pre>
-<pre><code>## [1] 1644</code></pre>
+<pre><code>## [1] 0</code></pre>
 <pre class="r"><code>zonas_vision_sf &lt;- st_read(con, query = &quot;
   SELECT * FROM dpa.zonas_vision_vejez
 &quot;)</code></pre>
