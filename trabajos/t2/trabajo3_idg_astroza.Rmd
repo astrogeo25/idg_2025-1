@@ -10,7 +10,13 @@ editor_options:
 
 # Intoducción
 
-Para este trabajo se porpone utilizar esta herramienta para obtener informacuón a nivel zona censal de los problemas de audición la población (variable h7a de la CASEN) presentada de manera binaria (1 población sana, 0 población con dificultades) para agrupar de mejor manera las respuestas
+Para este trabajo se propone rautilizar la variable problemas de visión (variable h7a de la CASEN) estudiada en el trabajo 2.
+
+K-means es muy útil para analizar la distribución de variables porque permite:
+
+Identificar patrones y estructuras ocultas en datos no etiquetados, agrupando observaciones similares.
+
+Facilitar la segmentación de datos en grupos homogéneos, lo que ayuda a entender cómo se distribuyen las variables en diferentes subpoblaciones o clusters.
 
 # Justificación de la elección
 
@@ -18,10 +24,15 @@ La Región Metropolitana es la zona con mayor concentración poblacional y diver
 
 Los problemas de vista son una condición de salud que afecta la calidad de vida y la productividad. 
 
-Según la Organización Mundial de la Salud, la discapacidad visual representa una enorme carga económica mundial, con un costo anual en términos de productividad estimado en 411 mil millones de dólares, lo que sugiere que las personas con problemas visuales pueden enfrentar desventajas económicas importantes
+Según la Organización Mundial de la Salud, la discapacidad visual representa una enorme carga económica mundial, con un costo anual en términos de productividad estimado en 411 mil millones de dólares, lo que sugiere que las personas con problemas visuales pueden enfrentar desventajas económicas importantes (OMS, 2023).
 
-https://www.who.int/es/news-room/fact-sheets/detail/blindness-and-visual-impairment
+# Marco teoríco
 
+El algoritmo k-means es un método de agrupamiento no supervisado que divide un conjunto de datos en "k" grupos (clusters) que presenten puntos similares entre sí. El objetivo del algoritmo es minimizar la suma de las distancias entre los puntos de datos y el centroide de su cluster, lo que permite obtener grupos compactos y bien definidos. Su funcionamiento básico consiste en:
+- Elegir k centroides iniciales (puntos centrales de cada grupo), generalmente de forma aleatoria.
+- Asignar cada punto de datos al cluster cuyo centroide esté más cercano, usando una medida de distancia (normalmente euclidiana).
+- Recalcular los centroides como la media de los puntos asignados a cada cluster.
+- Repetir los pasos 2 y 3 hasta que los centroides ya no cambien o se alcance un número máximo de iteraciones.
 
 # Area de estudio
 
@@ -43,7 +54,7 @@ Considerando lo anterior se puede dividir geograficamente la región de la sigui
 
 Para realizar estre trabajo se consideran las siguientes librerias que permiten conectar con Postgres para una mejor consulta de datos, microsimular y generar mapas.
 
-```{r libreria, message=FALSE, warning=FALSE}
+```{r lib, message=FALSE, warning=FALSE}
 # 1. Librerías
 library(rakeR)
 library(RPostgres) # Conexión postgres
@@ -58,7 +69,7 @@ El primer paso es leer las encuestas Cneso y CASEN y prepocesar los datos, con e
 
 Además se define de manera bineria la variable de estudio según lo mencionado en la introducción.
 
-```{r pre, message=FALSE, warning=FALSE}
+```{r preprocesado, echo=FALSE, message=FALSE, warning=FALSE}
 # 2. Entradas
 
 ## df del censo ya procesado
@@ -116,11 +127,6 @@ casen$sexo_cat <- factor(
          ifelse(casen$sexo == 1, sexo_levels[2], NA)), 
   levels = sexo_levels
 )
-```
-
-Con las variables listas se procede a microsimular la variable h7a a nivel zona censal.
-
-```{r microsimular, message=FALSE, warning=FALSE}
 # 4. Microsimulación
 cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
 inds_list = split(casen, casen$Comuna)
@@ -165,9 +171,7 @@ zonas_stats_df <- data.frame(
 )
 ```
 
-Una vez microsimulada la variable se conecta con la base de datos del Censo 2017 procesada con Postgis. Esto permite obtener los geocódigos de cada zona censal, necesarios para definir polígonos de un mapa representantivo de la variable de estudio.
-
-NOTA: Se debe omitr una parte del código a la segunda ejecución.
+Lectura de Postgres de la variable
 
 ```{r postgres, message=FALSE, warning=FALSE}
 # 5. Conexión con Postgres
