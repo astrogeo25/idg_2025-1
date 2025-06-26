@@ -1,47 +1,49 @@
-# 1. LIBRERÍAS
-library(rakeR)
-library(RPostgres)
+# 1. Librerías
+# Para simular
+library(RPostgres) # Conectar postgres
 library(DBI)
 library(ggplot2)
-library(dplyr)
-library(sf)
-library(data.table)
+library(sf) # Leer selecciones postgres
+# Kmeans
+library(factoextra)
+library(GGally) # Multiples gráficos
+library(rakeR)
 
-# 2. ENTRADAS
+# 2. Entradas
 
 ## df del censo ya procesado
 cons_censo_df <- readRDS("data/cons_censo_df.rds")
-casen_raw <- readRDS("data/casen_rm.rds") 
+casen_raw = readRDS("data/casen_rm.rds") 
 
-# 3. PREPROCESAMIENTO
+# 3. Preprocesamiento
 
 ## 3.1 CENSO
-col_cons   <- sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
-age_levels  <- grep("^edad", col_cons, value = TRUE)
-esc_levels  <- grep("^esco", col_cons, value = TRUE)
-sexo_levels <- grep("^sexo_",col_cons, value = TRUE)
+col_cons   = sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
+age_levels  = grep("^edad", col_cons, value = TRUE)
+esc_levels  = grep("^esco", col_cons, value = TRUE)
+sexo_levels = grep("^sexo_",col_cons, value = TRUE)
 
 ## 3.2 CASEN
-vars_base <- c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")
-casen <- casen_raw[, vars_base, drop = FALSE]
+vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")
+casen = casen_raw[ , vars_base, drop = FALSE]
 rm(casen_raw)
 
-casen$Comuna <- substr(as.character(casen$estrato), 1, 5)
-casen$estrato <- NULL
+casen$Comuna = substr(as.character(casen$estrato), 1, 5)
+casen$estrato = NULL
 
-casen$esc <- as.integer(unclass(casen$esc))
-casen$edad <- as.integer(unclass(casen$edad))
-casen$e6a <- as.numeric(unclass(casen$e6a))
-casen$sexo <- as.integer(unclass(casen$sexo))
-casen$ypc <- as.integer(unclass(casen$ypc))
-casen$h7a <- as.numeric(unclass(casen$h7a))
+casen$esc = as.integer(unclass(casen$esc))
+casen$edad = as.integer(unclass(casen$edad))
+casen$e6a = as.numeric(unclass(casen$e6a))
+casen$sexo = as.integer(unclass(casen$sexo))
+casen$ypc = as.integer(unclass(casen$ypc))
+casen$h7a = as.numeric(unclass(casen$h7a))
 casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
 
-idx_na <- which(is.na(casen$esc))
-fit <- lm(esc ~ e6a, data = casen[-idx_na,])
-pred <- predict(fit, newdata = casen[idx_na, ,drop = FALSE])
-casen$esc[idx_na] <- as.integer(round(pmax(0, pmin(29, pred))))
-casen$ID <- as.character(seq_len(nrow(casen)))
+idx_na = which(is.na(casen$esc))
+fit = lm(esc ~ e6a, data = casen[-idx_na,])
+pred = predict(fit, newdata = casen[idx_na, ,drop = FALSE])
+casen$esc[idx_na] = as.integer(round(pmax(0, pmin(29, pred))))
+casen$ID = as.character(seq_len(nrow(casen)))
 
 casen$edad_cat <- cut(
   casen$edad,
@@ -65,56 +67,48 @@ casen$sexo_cat <- factor(
   levels = sexo_levels
 )
 
-# Microsimulación
-cons_censo_comunas <- split(cons_censo_df, cons_censo_df$COMUNA)
-inds_list <- split(casen, casen$Comuna)
+# 4. Microsimulación
+cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
+inds_list = split(casen, casen$Comuna)
 
-sim_list <- lapply(names(cons_censo_comunas), function(zona) {
-  cons_i    <- cons_censo_comunas[[zona]]
-  col_order <- sort(setdiff(names(cons_i), c("COMUNA","GEOCODIGO")))
-  cons_i    <- cons_i[, c("GEOCODIGO", col_order), drop = FALSE]
+sim_list = lapply(names(cons_censo_comunas), function(zona) {
+  cons_i    = cons_censo_comunas[[zona]]
+  col_order = sort(setdiff(names(cons_i), c("COMUNA","GEOCODIGO")))
+  cons_i    = cons_i[, c("GEOCODIGO", col_order), drop = FALSE]
   
-  tmp    <- inds_list[[zona]]
-  inds_i <- tmp[, c("ID","edad_cat","esc_cat","sexo_cat"), drop = FALSE]
-  names(inds_i) <- c("ID","Edad","Escolaridad","Sexo")
+  tmp    = inds_list[[zona]]
+  inds_i = tmp[, c("ID","edad_cat","esc_cat","sexo_cat"), drop = FALSE]
+  names(inds_i) = c("ID","Edad","Escolaridad","Sexo")
   
-  w_frac  <- weight(cons = cons_i, inds = inds_i,
-                    vars = c("Edad","Escolaridad","Sexo"))
-  sim_i   <- integerise(weights = w_frac, inds = inds_i, seed = 123)
+  w_frac  = weight(cons = cons_i, inds = inds_i,
+                   vars = c("Edad","Escolaridad","Sexo"))
+  sim_i   = integerise(weights = w_frac, inds = inds_i, seed = 123)
   
-  merge(
-    sim_i,
-    tmp[, c("ID", "h7a", "ypc")],  # Se agrega ypc aquí para ingreso
-    by = "ID", all.x = TRUE
-  )
+  merge(sim_i,
+        tmp[, c("ID","h7a","edad")],  # ahora incluye edad
+        by = "ID", all.x = TRUE)
 })
 
-sim_df <- data.table::rbindlist(sim_list, idcol = "COMUNA")
+sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
 
-# Calcular porcentaje con problemas de visión (h7a == 0) por zona
-z_h7a <- aggregate(
-  h7a ~ COMUNA,
+# 4.1 Cálculo de métricas
+
+zonas_stats <- aggregate(
+  cbind(h7a, edad) ~ zone,
   data = sim_df,
-  FUN = function(x) {
-    total <- sum(!is.na(x))
-    con_problema <- sum(x == 0, na.rm = TRUE)
-    porcentaje <- 100 * con_problema / total
-    round(porcentaje, 2)
-  }
+  FUN = function(x) x
 )
 
-# Calcular promedio de ingreso (ypc) por zona
-z_ypc <- aggregate(
-  ypc ~ COMUNA,
-  data = sim_df,
-  FUN = function(x) round(mean(x, na.rm = TRUE), 2)
+zonas_stats <- within(zonas_stats, {
+  pct_problemas_vision = round(100 * sapply(h7a, function(x) sum(x == 0, na.rm = TRUE) / length(x)), 2)
+  pct_mayores_60 = round(100 * sapply(edad, function(x) sum(x >= 60, na.rm = TRUE) / length(x)), 2)
+})
+
+zonas_stats_df <- data.frame(
+  geocodigo = zonas_stats$zone,
+  pct_problemas_vision = zonas_stats$pct_problemas_vision,
+  pct_mayores_60 = zonas_stats$pct_mayores_60
 )
-
-# Unir ambos resultados en una sola tabla
-zonas_h7a <- merge(z_ypc, z_h7a, by = "COMUNA")
-
-# Renombrar columnas para mayor claridad y consistencia con geocodigo
-names(zonas_h7a) <- c("geocodigo", "mediana_ingreso", "pct_problemas_vision")
 
 # 5. Conexión con Postgres
 con <- dbConnect(
@@ -126,66 +120,103 @@ con <- dbConnect(
   password = "postgres"
 )
 
-# Escribir tabla temporal con resultados
+
 dbWriteTable(
   conn = con,
-  name = Id(schema = "dpa", table = "tmp_vision_rm"),
-  value = zonas_h7a,
+  name = Id(schema = "dpa", table = "tmp_vision_vejez_rm"),
+  value = zonas_stats_df,
   overwrite = TRUE,
   row.names = FALSE
 )
 
-# Crear índice y analizar tabla para optimizar consultas
-dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_rm(geocodigo)")
-dbExecute(con, "ANALYZE dpa.tmp_vision_rm")
+dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
+dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
 
-# Crear tabla final uniendo con zonas censales y filtrando zonas urbanas relevantes
 dbExecute(con, "
-  DROP TABLE IF EXISTS dpa.zonas_vision;
-  
-  CREATE TABLE dpa.zonas_vision AS
+  CREATE TABLE IF NOT EXIST dpa.zonas_vision_vejez AS
   SELECT
     z.*,
-    t.mediana_ingreso,
-    t.pct_problemas_vision AS vision
+    t.pct_problemas_vision AS vision,
+    t.pct_mayores_60 AS vejez
   FROM dpa.zonas_censales_rm AS z
-  LEFT JOIN dpa.tmp_vision_rm AS t
+  LEFT JOIN dpa.tmp_vision_vejez_rm AS t
     ON z.geocodigo::text = t.geocodigo
-  WHERE urbano = 1 
-    AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
+  WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
 
-# Leer tabla espacial desde Postgres
-zonas_vision_sf <- st_read(con, query = "SELECT * FROM dpa.zonas_vision")
+zonas_vision_sf <- st_read(con, query = "
+  SELECT * FROM dpa.zonas_vision_vejez
+")
 
-# Cerrar conexión
-dbDisconnect(con)
+# -------------- KMEANS
+# Se escalan las variables
+vars_scaled = scale(zonas_vision_sf)
 
-# 6. Crear mapas bivariados con ggplot2 y sf
+# 5) Método del codo para elegir K
+fviz_nbclust(vars_scaled, kmeans, method = "wss") +
+  labs(title = "Método del codo", x = "Número de clusters (K)", y = "WSS")
 
-# Normalizar variables para bivariado
-zonas_vision_sf <- zonas_vision_sf %>%
-  mutate(
-    ingreso_norm = (mediana_ingreso - min(mediana_ingreso, na.rm=TRUE)) / 
-      (max(mediana_ingreso, na.rm=TRUE) - min(mediana_ingreso, na.rm=TRUE)),
-    vision_norm = (vision - min(vision, na.rm=TRUE)) / 
-      (max(vision, na.rm=TRUE) - min(vision, na.rm=TRUE))
-  )
+# K-means
+set.seed(123)
+km = kmeans(vars_scaled, centers = 4, nstart = 25)
 
-# Crear índice bivariado simple (suma de normalizados)
-zonas_vision_sf <- zonas_vision_sf %>%
-  mutate(bivar_index = ingreso_norm + vision_norm)
+# Se incluye el número de cluster a la tabla
+zonas_vision_sf$cluster = as.factor(km$cluster)
 
-# Visualización del mapa bivariado
-ggplot(zonas_vision_sf) +
-  geom_sf(aes(fill = bivar_index), color = NA) +
-  scale_fill_gradient2(
-    low = "blue", mid = "white", high = "red", 
-    midpoint = median(zonas_vision_sf$bivar_index, na.rm=TRUE),
-    name = "Ingreso y Problemas visión"
-  ) +
-  theme_minimal() +
+# CONSULTA DE GEOMETRÍA
+sql_geometria = "
+SELECT
+  geocodigo::double precision AS geocodigo,
+  geom
+FROM dpa.zonas_censales_rm
+WHERE nom_provin = 'SANTIAGO'
+  AND urbano     = 1;
+"
+
+# LEER CAPA GEOGRÁFICA
+sf_zonas = st_read(con, query = sql_geometria)
+
+# COMBINAR CON INDICADORES
+sf_mapa = merge(
+  x     = sf_zonas,
+  y     = zonas_vision_sf,
+  by    = "geocodigo",
+  all.x = FALSE
+)
+
+# EXPORTAR A GEOJSON PARA USAR EN QGIS
+st_write(sf_mapa, "zonas_clusters.geojson", driver = "GeoJSON", delete_dsn = TRUE)
+
+# Se obtiene geometría comunal para Santiago
+sql_comunas = "
+SELECT cut, nom_comuna, geom
+FROM dpa.comunas_rm_shp
+WHERE nom_provin = 'SANTIAGO';
+"
+sf_comunas_santiago = st_read(con, query = sql_comunas)
+
+# Calcular bounding box para limitar el mapa al área urbana de Santiago
+bbox = st_bbox(sf_mapa)
+
+# Crear mapa de clusters
+mapa_clusters = ggplot() +
+  geom_sf(data = sf_mapa, aes(fill = cluster), color = NA) +
+  geom_sf(data = sf_comunas_santiago, fill = NA, color = "black", size = 0.4) +
+  geom_sf_text(data = st_centroid(sf_comunas_santiago), aes(label = nom_comuna), size = 2, fontface = "bold") +
+  scale_fill_brewer(palette = "Set2", name = "Cluster") +
   labs(
-    title = "Mapa bivariado: Promedio de ingreso y porcentaje con problemas de visión",
-    subtitle = "Zonas urbanas de Santiago, San Bernardo y Puente Alto"
+    title = "Mapa de Clusters de Zonas Censales",
+    subtitle = "Provincia de Santiago, Región Metropolitana"
+  ) +
+  coord_sf(
+    xlim = c(bbox["xmin"], bbox["xmax"]),
+    ylim = c(bbox["ymin"], bbox["ymax"]),
+    expand = FALSE
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
   )
+
+print(mapa_clusters)
