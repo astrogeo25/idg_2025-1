@@ -12,8 +12,8 @@ library(rakeR)
 # 2. Entradas
 
 ## df del censo ya procesado
-cons_censo_df <- readRDS("cons_censo_df.rds")
-casen_raw = readRDS("casen_rm.rds") 
+cons_censo_df <- readRDS("data/cons_censo_df.rds")
+casen_raw = readRDS("data/casen_rm.rds") 
 
 # 3. Preprocesamiento
 
@@ -32,10 +32,10 @@ casen$Comuna = substr(as.character(casen$estrato), 1, 5)
 casen$estrato = NULL
 
 casen$esc = as.integer(unclass(casen$esc))
-casen$edad = as.integer(unclass(casen$edad))
+casen$edad = as.numeric(unclass(casen$edad))
 casen$e6a = as.numeric(unclass(casen$e6a))
 casen$sexo = as.integer(unclass(casen$sexo))
-casen$ypc = as.integer(unclass(casen$ypc))
+casen$ypc = as.numeric(unclass(casen$ypc))
 casen$h7a = as.numeric(unclass(casen$h7a))
 casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
 
@@ -105,27 +105,26 @@ zonas_stats <- within(zonas_stats, {
   ingreso = round(sapply(ypc, function(x) mean(x, na.rm = TRUE)), 2)
 })
 
-# -------------- KMEANS
-# Se escalan las variables
-vars_scaled = scale(zonas_stats)
-
-# 5) Método del codo para elegir K
-fviz_nbclust(vars_scaled, kmeans, method = "wss") +
-  labs(title = "Método del codo", x = "Número de clusters (K)", y = "WSS")
-
-# K-means
-set.seed(123)
-km = kmeans(vars_scaled, centers = 4, nstart = 25)
-
-# Se incluye el número de cluster a la tabla
-zonas_stats$cluster = as.factor(km$cluster)
-                  
 zonas_stats_df <- data.frame(
   geocodigo = zonas_stats$zone,
   tasa_vision = zonas_stats$tasa_vision,
   tasa_mayores = zonas_stats$tasa_mayores,
   ingreso = zonas_stats$ingreso
 )
+
+# Escalar solo las columnas numéricas (ignorando 'geocodigo')
+vars_scaled <- scale(zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso")])
+
+# 6) Método del codo
+# Visualiza la suma de cuadrados dentro del cluster (WSS) para varios K
+fviz_nbclust(vars_scaled, kmeans, method = "wss") + # datos, algoritmo, metodo de selección
+  labs(title = "Método del codo", x = "Número de clusters (K)", y = "WSS")
+
+set.seed(123)  # para reproducibilidad
+km = kmeans(vars_scaled, centers = 3, nstart = 25) # 4 es el K optimo
+
+# Se incluye el número de cluster a la tabla
+zonas_stats_df$cluster = as.factor(km$cluster)
 
 # 5. Conexión con Postgres
 con <- dbConnect(
@@ -164,7 +163,6 @@ dbExecute(con, "
 zonas_vision_sf <- st_read(con, query = "
   SELECT * FROM dpa.zonas_vision_vejez
 ")
-
 # CONSULTA DE GEOMETRÍA
 sql_geometria = "
 SELECT
