@@ -17,13 +17,13 @@ casen_raw = readRDS("data/casen_rm.rds")
 
 # 3. Preprocesamiento
 
-## 3.1 CENSO
+## 3.1 Extracción de variables del Censo
 col_cons   = sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
 age_levels  = grep("^edad", col_cons, value = TRUE)
 esc_levels  = grep("^esco", col_cons, value = TRUE)
 sexo_levels = grep("^sexo_",col_cons, value = TRUE)
 
-## 3.2 CASEN
+## 3.2 Extracción de variables de la CASEN
 vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")
 casen = casen_raw[ , vars_base, drop = FALSE]
 rm(casen_raw)
@@ -31,6 +31,7 @@ rm(casen_raw)
 casen$Comuna = substr(as.character(casen$estrato), 1, 5)
 casen$estrato = NULL
 
+# Definir según tipo la variable. Se usa numericas para calculos en R
 casen$esc = as.integer(unclass(casen$esc))
 casen$edad = as.numeric(unclass(casen$edad))
 casen$e6a = as.numeric(unclass(casen$e6a))
@@ -94,17 +95,18 @@ sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
 # 4.1 Cálculo de métricas
 
 zonas_stats <- aggregate(
-  cbind(h7a, edad, ypc) ~ zone, # Se incluye ypc
+  cbind(h7a, edad, ypc) ~ zone, # Incluir variables micro simular
   data = sim_df,
   FUN = function(x) x
 )
 
+# Calcular indices mediante function(x) y elimnar valores vacíos
 zonas_stats <- within(zonas_stats, {
   tasa_vision = round(100 * sapply(h7a, function(x) sum(x == 0, na.rm = TRUE) / length(x)), 2)
   tasa_mayores = round(100 * sapply(edad, function(x) sum(x >= 60, na.rm = TRUE) / length(x)), 2)
   ingreso = round(sapply(ypc, function(x) mean(x, na.rm = TRUE)), 2)
 })
-
+# Agregar a un data frame
 zonas_stats_df <- data.frame(
   geocodigo = zonas_stats$zone,
   tasa_vision = zonas_stats$tasa_vision,
@@ -112,21 +114,20 @@ zonas_stats_df <- data.frame(
   ingreso = zonas_stats$ingreso
 )
 
-# Escalar solo las columnas numéricas (ignorando 'geocodigo')
+# 5. Kmeans
+# Escalar variables de estudio
 vars_scaled <- scale(zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso")])
 
-# 6) Método del codo
-# Visualiza la suma de cuadrados dentro del cluster (WSS) para varios K
-fviz_nbclust(vars_scaled, kmeans, method = "wss") + # datos, algoritmo, metodo de selección
+# 5.1 Método del codo: Visualiza la suma de cuadrados dentro del cluster (WSS) para varios K
+fviz_nbclust(vars_scaled, kmeans, method = "wss") + # Datos, algoritmo, método de selección
   labs(title = "Método del codo", x = "Número de clusters (K)", y = "WSS")
 
-set.seed(123)  # para reproducibilidad
-km = kmeans(vars_scaled, centers = 3, nstart = 25) # 4 es el K optimo
+# 5.2 Calcular kmeans
+set.seed(123)  # Para reproducibilidad
+km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k determinado (3)
+zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la tabla
 
-# Se incluye el número de cluster a la tabla
-zonas_stats_df$cluster = as.factor(km$cluster)
-
-# 5. Conexión con Postgres
+# 6. Conexión con Postgres
 con <- dbConnect(
   Postgres(),
   dbname = "censo_rm_2017",
