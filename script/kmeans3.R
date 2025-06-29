@@ -142,20 +142,3 @@ mapa_clusters = ggplot() +
   )
 
 print(mapa_clusters)
-
-
-library(GGally)
-# Seleccionar variables más el cluster como factor
-df_plot = df_indicadores[, c("ptje_migrantes", "ptje_esc_mayor_12", "ptje_adulto_mayor", "cluster")]
-
-# Gráfico de colrrelaciones
-p = ggpairs(
-  df_plot,
-  columns = 1:3,
-  mapping = aes(color = cluster), 
-  upper = list(continuous = "points"),
-  lower = list(continuous = "points"),
-  diag  = list(continuous = "densityDiag")
-)
-
-print(p)

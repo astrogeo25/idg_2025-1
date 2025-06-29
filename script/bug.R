@@ -127,7 +127,24 @@ set.seed(123)  # Para reproducibilidad
 km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k determinado (3)
 zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la tabla
 
-# 6. Conexión con Postgres
+# 6. Mapa de correlaciones
+library(GGally)
+# Eliminar columna 'geocodigo' (si está presente en el data frame)
+df_plot <- zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso", "cluster")]
+# Asegurarse de que 'cluster' sea un factor
+df_plot$cluster <- as.factor(df_plot$cluster)
+
+# Crear el gráfico de correlaciones
+p = ggpairs(
+  df_plot,
+  columns = 1:3,  # Variables numéricas (sin 'cluster')
+  mapping = aes(color = cluster),  # Colorear por cluster
+  upper = list(continuous = "points"),  # Gráfico de puntos en la parte superior
+  lower = list(continuous = "points"),  # Gráfico de puntos en la parte inferior
+  diag  = list(continuous = "densityDiag")  # Gráfico de densidad en la diagonal
+)
+
+# 7. Conexión con Postgres
 con <- dbConnect(
   Postgres(),
   dbname = "censo_rm_2017",
@@ -148,62 +165,61 @@ dbWriteTable(
 dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
 dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
 
+dbExecute(con, "DROP TABLE IF EXISTS dpa.zonas_vision_vejez")
+
 dbExecute(con, "
-  CREATE TABLE IF NOT EXISTS dpa.zonas_vision_vejez AS
+  CREATE TABLE dpa.zonas_vision_vejez AS
   SELECT
     z.*,
     t.tasa_vision AS vision,
     t.tasa_mayores AS vejez,
-    t.ingreso AS ingreso
+    t.ingreso AS ingreso,
+    t.cluster
   FROM dpa.zonas_censales_rm AS z
   LEFT JOIN dpa.tmp_vision_vejez_rm AS t
     ON z.geocodigo::text = t.geocodigo
-  WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
+  WHERE urbano = 1
+    AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
 
 zonas_vision_sf <- st_read(con, query = "
   SELECT * FROM dpa.zonas_vision_vejez
 ")
-# CONSULTA DE GEOMETRÍA
-sql_geometria = "
-SELECT
-  geocodigo::double precision AS geocodigo,
-  geom
-FROM dpa.zonas_censales_rm
-WHERE nom_provin = 'SANTIAGO'
-  AND urbano     = 1;
+
+# 8. Visualizar mapa de clusters
+
+library(sf)
+library(ggplot2)
+library(RPostgres)
+library(DBI)
+library(RColorBrewer)
+
+# Leer geometría + atributos directamente desde la tabla final
+sql_mapa <- "
+SELECT *
+FROM dpa.zonas_vision_vejez
+WHERE urbano = 1
+  AND (nom_provin = 'SANTIAGO' OR nom_comuna IN ('SAN BERNARDO', 'PUENTE ALTO'));
 "
 
-# LEER CAPA GEOGRÁFICA
-sf_zonas = st_read(con, query = sql_geometria)
+sf_mapa <- st_read(con, query = sql_mapa)
 
-# COMBINAR CON INDICADORES
-sf_mapa = merge(
-  x     = sf_zonas,
-  y     = zonas_vision_sf,
-  by    = "geocodigo",
-  all.x = FALSE
-)
-
-# EXPORTAR A GEOJSON PARA USAR EN QGIS
-st_write(sf_mapa, "zonas_clusters.geojson", driver = "GeoJSON", delete_dsn = TRUE)
-
-# Se obtiene geometría comunal para Santiago
-sql_comunas = "
+# Leer geometría de comunas para contexto
+sql_comunas <- "
 SELECT cut, nom_comuna, geom
 FROM dpa.comunas_rm_shp
 WHERE nom_provin = 'SANTIAGO';
 "
-sf_comunas_santiago = st_read(con, query = sql_comunas)
+sf_comunas <- st_read(con, query = sql_comunas)
 
-# Calcular bounding box para limitar el mapa al área urbana de Santiago
-bbox = st_bbox(sf_mapa)
+# Bounding box para acotar visualización
+bbox <- st_bbox(sf_mapa)
 
 # Crear mapa de clusters
-mapa_clusters = ggplot() +
-  geom_sf(data = sf_mapa, aes(fill = cluster), color = NA) +
-  geom_sf(data = sf_comunas_santiago, fill = NA, color = "black", size = 0.4) +
-  geom_sf_text(data = st_centroid(sf_comunas_santiago), aes(label = nom_comuna), size = 2, fontface = "bold") +
+mapa_clusters <- ggplot() +
+  geom_sf(data = sf_mapa, aes(fill = as.factor(cluster)), color = NA) +
+  geom_sf(data = sf_comunas, fill = NA, color = "black", size = 0.4) +
+  geom_sf_text(data = st_centroid(sf_comunas), aes(label = nom_comuna), size = 2, fontface = "bold") +
   scale_fill_brewer(palette = "Set2", name = "Cluster") +
   labs(
     title = "Mapa de Clusters de Zonas Censales",
@@ -219,4 +235,49 @@ mapa_clusters = ggplot() +
     plot.title = element_text(hjust = 0.5, face = "bold"),
     plot.subtitle = element_text(hjust = 0.5)
   )
+
 print(mapa_clusters)
+
+# (Opcional) Exportar como GeoJSON
+# st_write(sf_mapa, "zonas_clusters.geojson", driver = "GeoJSON", delete_dsn = TRUE)
+
+# Mostrar el gráfico
+print(p)
+
+# 9 Generar indices de Shannon
+
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(vegan)
+library(ggplot2)
+
+# Crear la tabla con el conteo de clusters por comuna
+tabla_shannon <- sf_mapa |>
+  st_drop_geometry() |>
+  count(nom_comuna, cluster) |>
+  filter(!is.na(nom_comuna)) |>
+  tidyr::pivot_wider(names_from = cluster, values_from = n, values_fill = 0) |>
+  column_to_rownames("nom_comuna")
+
+# Calcular el índice de Shannon para cada comuna
+shannon <- diversity(tabla_shannon, index = "shannon")
+
+# Crear un data frame con el índice de Shannon por comuna
+df_shannon <- data.frame(
+  nom_comuna = names(shannon),
+  shannon_index = shannon
+)
+
+# Unir los resultados con la geometría de las comunas
+sf_comunas_shannon <- merge(sf_comunas, df_shannon, by = "nom_comuna")
+
+# Crear el gráfico del índice de Shannon por comuna
+ggplot(sf_comunas_shannon) +
+  geom_sf(aes(fill = shannon_index), color = "white") +
+  scale_fill_gradient(name = "Índice de Shannon") +
+  labs(
+    title = "Variabilidad interna de clusters por comuna",
+    subtitle = "Índice de diversidad (mayor = más heterogénea)"
+  ) +
+  theme_minimal()
