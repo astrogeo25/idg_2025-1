@@ -1,0 +1,255 @@
+---
+title: "Analisis problemas visuales en la Región Metropolitana"
+author: "Manuel Astroza"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+# Intoducción
+
+Para este trabajo se propone rautilizar la variable problemas de visión (variable h7a de la CASEN) estudiada en el trabajo 2.
+
+K-means es muy útil para analizar la distribución de variables porque permite:
+
+Identificar patrones y estructuras ocultas en datos no etiquetados, agrupando observaciones similares.
+
+Facilitar la segmentación de datos en grupos homogéneos, lo que ayuda a entender cómo se distribuyen las variables en diferentes subpoblaciones o clusters.
+
+# Justificación de la elección
+
+La Región Metropolitana es la zona con mayor concentración poblacional y diversidad socioeconómica, lo que implica heterogeneidad en la prevalencia y acceso a servicios de salud visual.
+
+Los problemas de vista son una condición de salud que afecta la calidad de vida y la productividad. 
+
+Según la Organización Mundial de la Salud, la discapacidad visual representa una enorme carga económica mundial, con un costo anual en términos de productividad estimado en 411 mil millones de dólares, lo que sugiere que las personas con problemas visuales pueden enfrentar desventajas económicas importantes (OMS, 2023).
+
+# Marco teoríco
+
+El algoritmo k-means es un método de agrupamiento no supervisado que divide un conjunto de datos en "k" grupos (clusters) que presenten puntos similares entre sí. El objetivo del algoritmo es minimizar la suma de las distancias entre los puntos de datos y el centroide de su cluster, lo que permite obtener grupos compactos y bien definidos. Su funcionamiento básico consiste en:
+- Elegir k centroides iniciales (puntos centrales de cada grupo), generalmente de forma aleatoria.
+- Asignar cada punto de datos al cluster cuyo centroide esté más cercano, usando una medida de distancia (normalmente euclidiana).
+- Recalcular los centroides como la media de los puntos asignados a cada cluster.
+- Repetir los pasos 2 y 3 hasta que los centroides ya no cambien o se alcance un número máximo de iteraciones.
+
+# Area de estudio
+
+Según proyecciones del Instituto Nacional de Estadísticas (INE) para 2025 la región tendrá 8.47 millones de habitantes aproximadamente, representando el 41.9% de la población total del país. La distribución por sexo es equilibrada, con un 50.5% mujeres y 49.5% hombres. En términos de edad, el 16.8% serán menores de 14 años, el 4.8% adolescentes (14-17 años), y un 18% adultos mayores (60 años o más), evidenciando una población con un importante segmento envejecido.
+
+La Región Metropolitana es el principal motor económico del país, concentrando gran parte de la actividad productiva nacional. Destacan sectores como comercio, construcción, servicios profesionales, financieros e industria manufacturera. La región atrae inversiones públicas y privadas que impulsan el desarrollo urbano y económico generando oportunidades laborales diversas.
+
+Los niveles de pobreza son relativamente bajos en comparación con el resto del país, pero con heterogeneidades internas. La pobreza por ingresos en algunas comunas es baja más la pobreza multidimensional (que considera acceso a educación, salud, vivienda y otros servicios) es más dispar ciertos sectores.
+
+Considerando lo anterior se puede dividir geograficamente la región de la siguiente manera.
+
+- Zona Centro: Suele concentrar actividades comerciales y administrativas, con ingresos variables, pero en general presenta un nivel medio de ingresos.
+- Zona Norte: Tiene una mezcla de sectores industriales y residenciales, con ingresos que pueden ser medios a bajos.
+- Zona Sur: Predominan sectores con ingresos medios a bajos, con mayor presencia de población con educación básica incompleta.
+- Zona Este: Es la zona con mayores ingresos promedio, alta escolaridad y mejor acceso a servicios, caracterizada por un nivel socioeconómico alto.
+- Zona Oeste: Presenta ingresos medios a bajos, con una mayor proporción de población con menor nivel educacional y mayor vulnerabilidad social.
+
+# Desarrollo
+
+Para realizar estre trabajo se consideran las siguientes librerias que permiten conectar con Postgres para una mejor consulta de datos, microsimular y generar mapas.
+
+```{r lib, message=FALSE, warning=FALSE}
+# 1. Librerías
+# Para simular
+library(RPostgres) # Conectar postgres
+library(DBI)
+library(ggplot2)
+library(sf) # Leer selecciones postgres
+# Kmeans
+library(factoextra)
+library(GGally) # Multiples gráficos
+library(rakeR)
+```
+
+El primer paso es leer las encuestas Cneso y CASEN y prepocesar los datos, con el fin de trabajar solo variables de interes por la magnitud de las mismas.
+
+Además se define de manera bineria la variable de estudio según lo mencionado en la introducción.
+
+```{r preprocesado, echo=FALSE, message=FALSE, warning=FALSE}
+# 2. Entradas
+
+## df del censo ya procesado
+cons_censo_df <- readRDS("data/cons_censo_df.rds")
+casen_raw = readRDS("data/casen_rm.rds") 
+
+# 3. Preprocesamiento
+
+## 3.1 Extracción de variables del Censo
+col_cons   = sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
+age_levels  = grep("^edad", col_cons, value = TRUE)
+esc_levels  = grep("^esco", col_cons, value = TRUE)
+sexo_levels = grep("^sexo_",col_cons, value = TRUE)
+
+## 3.2 Extracción de variables de la CASEN
+vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")
+casen = casen_raw[ , vars_base, drop = FALSE]
+rm(casen_raw)
+
+casen$Comuna = substr(as.character(casen$estrato), 1, 5)
+casen$estrato = NULL
+
+# Definir según tipo la variable. Se usa numericas para calculos en R
+casen$esc = as.integer(unclass(casen$esc))
+casen$edad = as.numeric(unclass(casen$edad))
+casen$e6a = as.numeric(unclass(casen$e6a))
+casen$sexo = as.integer(unclass(casen$sexo))
+casen$ypc = as.numeric(unclass(casen$ypc))
+casen$h7a = as.numeric(unclass(casen$h7a))
+casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
+
+idx_na = which(is.na(casen$esc))
+fit = lm(esc ~ e6a, data = casen[-idx_na,])
+pred = predict(fit, newdata = casen[idx_na, ,drop = FALSE])
+casen$esc[idx_na] = as.integer(round(pmax(0, pmin(29, pred))))
+casen$ID = as.character(seq_len(nrow(casen)))
+
+casen$edad_cat <- cut(
+  casen$edad,
+  breaks = c(0,30,40,50,60,70,80,Inf),
+  labels = age_levels,
+  right = FALSE, include.lowest = TRUE
+)
+
+casen$esc_cat <- factor(
+  with(casen,
+       ifelse(esc == 0,           esc_levels[1],
+              ifelse(esc <= 8,    esc_levels[2],
+                     ifelse(esc <= 12, esc_levels[3],
+                            esc_levels[4])))),
+  levels = esc_levels
+)
+
+casen$sexo_cat <- factor(
+  ifelse(casen$sexo == 2, sexo_levels[1],  
+         ifelse(casen$sexo == 1, sexo_levels[2], NA)), 
+  levels = sexo_levels
+)
+
+# 4. Microsimulación
+cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
+inds_list = split(casen, casen$Comuna)
+
+sim_list = lapply(names(cons_censo_comunas), function(zona) {
+  cons_i    = cons_censo_comunas[[zona]]
+  col_order = sort(setdiff(names(cons_i), c("COMUNA","GEOCODIGO")))
+  cons_i    = cons_i[, c("GEOCODIGO", col_order), drop = FALSE]
+  
+  tmp    = inds_list[[zona]]
+  inds_i = tmp[, c("ID","edad_cat","esc_cat","sexo_cat"), drop = FALSE]
+  names(inds_i) = c("ID","Edad","Escolaridad","Sexo")
+  
+  w_frac  = weight(cons = cons_i, inds = inds_i,
+                   vars = c("Edad","Escolaridad","Sexo"))
+  sim_i   = integerise(weights = w_frac, inds = inds_i, seed = 123)
+  
+  merge(sim_i,
+        tmp[, c("ID","h7a","edad", "ypc")],  # ahora incluye edad e ypc
+        by = "ID", all.x = TRUE)
+})
+
+sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
+
+# 4.1 Cálculo de métricas
+
+zonas_stats <- aggregate(
+  cbind(h7a, edad, ypc) ~ zone, # Incluir variables micro simular
+  data = sim_df,
+  FUN = function(x) x
+)
+
+# Calcular indices mediante function(x) y elimnar valores vacíos
+zonas_stats <- within(zonas_stats, {
+  tasa_vision = round(100 * sapply(h7a, function(x) sum(x == 0, na.rm = TRUE) / length(x)), 2)
+  tasa_mayores = round(100 * sapply(edad, function(x) sum(x >= 60, na.rm = TRUE) / length(x)), 2)
+  ingreso = round(sapply(ypc, function(x) mean(x, na.rm = TRUE)), 2)
+})
+# Agregar a un data frame
+zonas_stats_df <- data.frame(
+  geocodigo = zonas_stats$zone,
+  tasa_vision = zonas_stats$tasa_vision,
+  tasa_mayores = zonas_stats$tasa_mayores,
+  ingreso = zonas_stats$ingreso
+)
+
+# 5. Kmeans
+# Escalar variables de estudio
+vars_scaled <- scale(zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso")])
+
+# 5.1 Método del codo: Visualiza la suma de cuadrados dentro del cluster (WSS) para varios K
+fviz_nbclust(vars_scaled, kmeans, method = "wss") + # Datos, algoritmo, método de selección
+  labs(title = "Método del codo", x = "Número de clusters (K)", y = "WSS")
+
+# 5.2 Calcular kmeans
+set.seed(123)  # Para reproducibilidad
+km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k (3)
+zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la tabla
+```
+
+Lectura de Postgres de la variable
+
+```{r postgres, message=FALSE, warning=FALSE}
+# 5. Conexión con Postgres
+con <- dbConnect(
+  Postgres(),
+  dbname = "censo_rm_2017",
+  host = "localhost",
+  port = 5432,
+  user = "postgres",
+  password = "postgres"
+)
+
+
+dbWriteTable(
+  conn = con,
+  name = Id(schema = "dpa", table = "tmp_vision_vejez_rm"),
+  value = zonas_stats_df,
+  overwrite = TRUE,
+  row.names = FALSE
+)
+
+dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
+dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
+
+# Crear tabla que agrupe tasas de problemas de visión, adultos mayores por zona censal en PGAdmin
+dbExecute(con, "
+  CREATE TABLE IF NOT EXISTS dpa.zonas_vision_vejez AS
+  SELECT
+    z.*,
+    t.pct_problemas_vision AS vision,
+    t.pct_mayores_60 AS vejez
+  FROM dpa.zonas_censales_rm AS z
+  LEFT JOIN dpa.tmp_vision_vejez_rm AS t
+    ON z.geocodigo::text = t.geocodigo
+  WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
+")
+
+zonas_vision_sf <- st_read(con, query = "
+  SELECT * FROM dpa.zonas_vision_vejez
+")
+```
+
+
+
+# Analisis
+
+
+
+# Conclusión
+
+Este estudio permitió correlacionar y visualizar los indices de vejez y problemas visuales de la población de la Región Metropolitana. Se puede concluir que las zonas más afectas son la comuna de Recoleta, toda la zona Oeste y sectores específicos de la zona sur, en los cuales se debería emplear políticas públicas de prevención (para las zonas moradas) y atención médica (para zonas azules).
+
+La microsimulación es de gran ayuda para investigar casos especiales como Maipú o San Bernardo los cuales tienen zonas censales donde agudiza el problema, las cuales pasaría por alto si se estudiara a nivel comuna sin microsimular.
+
+# Bibliografía
+
+Telencuestas. (2023, agosto 29). Población de la Región Metropolitana de Santiago en 2025. Telencuestas. https://telencuestas.com/censos-de-poblacion/chile/2025/metropolitana-de-santiago
+
+Ministerio de Desarrollo Social y Familia. (2020). Índice de prioridad social 2020 [Informe]. Gobierno de Chile. https://www.desarrollosocialyfamilia.gob.cl/storage/docs/boletin_interno/INDICE_DE_PRIORIDAD_SOCIAL_2020(1).pdf
+
+World Health Organization: WHO. (2023, 10 agosto). Ceguera y discapacidad visual. https://www.who.int/es/news-room/fact-sheets/detail/blindness-and-visual-impairment
