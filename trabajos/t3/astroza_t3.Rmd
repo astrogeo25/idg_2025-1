@@ -56,20 +56,21 @@ Para realizar estre trabajo se consideran las siguientes librerias que permiten 
 
 ```{r lib, message=FALSE, warning=FALSE}
 # 1. Librerías
-# Para simular
-library(RPostgres) # Conectar postgres
-library(DBI)
-library(ggplot2)
-library(sf) # Leer selecciones postgres
-# Kmeans
-library(factoextra)
-library(GGally) # Multiples gráficos
-library(rakeR)
+library(RPostgres)  # Conectar a Postgres
+library(DBI)         # Manipular bases de datos
+library(ggplot2)     # Visualización
+library(sf)          # Manejo de geometría
+library(factoextra)  # K-means
+library(GGally)      # Gráficos de correlación
+library(rakeR)       # Microsimulación
+library(vegan)       # Cálculo de diversidad
+library(dplyr)       # Manipulación de datos
+library(tidyr)       # Transformaciones de datos
+library(tibble)      # Para tibble
+library(RColorBrewer) # Paletas de colores
 ```
 
-El primer paso es leer las encuestas Cneso y CASEN y prepocesar los datos, con el fin de trabajar solo variables de interes por la magnitud de las mismas.
-
-Además se define de manera bineria la variable de estudio según lo mencionado en la introducción.
+Se realiza un preprocesamiento identico al del trabajo anterior. Este mismo se omite
 
 ```{r preprocesado, echo=FALSE, message=FALSE, warning=FALSE}
 # 2. Entradas
@@ -154,7 +155,9 @@ sim_list = lapply(names(cons_censo_comunas), function(zona) {
 })
 
 sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
+```
 
+```{r k means, message=FALSE, warning=FALSE}
 # 4.1 Cálculo de métricas
 
 zonas_stats <- aggregate(
@@ -187,9 +190,10 @@ fviz_nbclust(vars_scaled, kmeans, method = "wss") + # Datos, algoritmo, método 
 
 # 5.2 Calcular kmeans
 set.seed(123)  # Para reproducibilidad
-km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k (3)
+km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k determinado (3)
 zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la tabla
 ```
+
 
 Lectura de Postgres de la variable
 
