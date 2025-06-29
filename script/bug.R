@@ -1,13 +1,16 @@
 # 1. Librerías
-# Para simular
-library(RPostgres) # Conectar postgres
-library(DBI)
-library(ggplot2)
-library(sf) # Leer selecciones postgres
-# Kmeans
-library(factoextra)
-library(GGally) # Multiples gráficos
-library(rakeR)
+library(RPostgres)  # Conectar a Postgres
+library(DBI)         # Manipular bases de datos
+library(ggplot2)     # Visualización
+library(sf)          # Manejo de geometría
+library(factoextra)  # K-means
+library(GGally)      # Gráficos de correlación
+library(rakeR)       # Microsimulación
+library(vegan)       # Cálculo de diversidad
+library(dplyr)       # Manipulación de datos
+library(tidyr)       # Transformaciones de datos
+library(tibble)      # Para tibble
+library(RColorBrewer) # Paletas de colores
 
 # 2. Entradas
 
@@ -128,13 +131,12 @@ km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k determinado (3
 zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la tabla
 
 # 6. Mapa de correlaciones
-library(GGally)
-# Eliminar columna 'geocodigo' (si está presente en el data frame)
-df_plot <- zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso", "cluster")]
-# Asegurarse de que 'cluster' sea un factor
-df_plot$cluster <- as.factor(df_plot$cluster)
 
-# Crear el gráfico de correlaciones
+# 6.1 Seleccionar variables
+df_plot <- zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso", "cluster")]
+df_plot$cluster <- as.factor(df_plot$cluster) # Asegurar que 'cluster' sea un factor
+
+# 6.2 Crear el gráfico de correlaciones
 p = ggpairs(
   df_plot,
   columns = 1:3,  # Variables numéricas (sin 'cluster')
@@ -143,6 +145,7 @@ p = ggpairs(
   lower = list(continuous = "points"),  # Gráfico de puntos en la parte inferior
   diag  = list(continuous = "densityDiag")  # Gráfico de densidad en la diagonal
 )
+print(p)
 
 # 7. Conexión con Postgres
 con <- dbConnect(
@@ -162,11 +165,12 @@ dbWriteTable(
   row.names = FALSE
 )
 
+# Optimizar calculo y borrar tabla anterior (para agregar cluster)
 dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
 dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
-
 dbExecute(con, "DROP TABLE IF EXISTS dpa.zonas_vision_vejez")
 
+# Crear tabla: variables, cluster, unir por geocódigo solo zonas urbanas
 dbExecute(con, "
   CREATE TABLE dpa.zonas_vision_vejez AS
   SELECT
@@ -187,14 +191,7 @@ zonas_vision_sf <- st_read(con, query = "
 ")
 
 # 8. Visualizar mapa de clusters
-
-library(sf)
-library(ggplot2)
-library(RPostgres)
-library(DBI)
-library(RColorBrewer)
-
-# Leer geometría + atributos directamente desde la tabla final
+# 8.1 Leer geometría
 sql_mapa <- "
 SELECT *
 FROM dpa.zonas_vision_vejez
@@ -212,10 +209,10 @@ WHERE nom_provin = 'SANTIAGO';
 "
 sf_comunas <- st_read(con, query = sql_comunas)
 
-# Bounding box para acotar visualización
+# 8.2 Bounding box para acotar visualización
 bbox <- st_bbox(sf_mapa)
 
-# Crear mapa de clusters
+# 8.3 Crear mapa de clusters
 mapa_clusters <- ggplot() +
   geom_sf(data = sf_mapa, aes(fill = as.factor(cluster)), color = NA) +
   geom_sf(data = sf_comunas, fill = NA, color = "black", size = 0.4) +
@@ -241,18 +238,8 @@ print(mapa_clusters)
 # (Opcional) Exportar como GeoJSON
 # st_write(sf_mapa, "zonas_clusters.geojson", driver = "GeoJSON", delete_dsn = TRUE)
 
-# Mostrar el gráfico
-print(p)
-
-# 9 Generar indices de Shannon
-
-library(tibble)
-library(dplyr)
-library(tidyr)
-library(vegan)
-library(ggplot2)
-
-# Crear la tabla con el conteo de clusters por comuna
+# 9. Generar indices de Shannon
+# 9.1 Crear la tabla con el conteo de clusters por comuna
 tabla_shannon <- sf_mapa |>
   st_drop_geometry() |>
   count(nom_comuna, cluster) |>
@@ -260,19 +247,17 @@ tabla_shannon <- sf_mapa |>
   tidyr::pivot_wider(names_from = cluster, values_from = n, values_fill = 0) |>
   column_to_rownames("nom_comuna")
 
-# Calcular el índice de Shannon para cada comuna
+# 9.2 Calcular el índice de Shannon para cada comuna
 shannon <- diversity(tabla_shannon, index = "shannon")
 
-# Crear un data frame con el índice de Shannon por comuna
+# Crear un data frame con el índice de Shannon por comuna y unir por comuna
 df_shannon <- data.frame(
   nom_comuna = names(shannon),
   shannon_index = shannon
 )
-
-# Unir los resultados con la geometría de las comunas
 sf_comunas_shannon <- merge(sf_comunas, df_shannon, by = "nom_comuna")
 
-# Crear el gráfico del índice de Shannon por comuna
+# 9.3 Crear el gráfico del índice de Shannon por comuna
 ggplot(sf_comunas_shannon) +
   geom_sf(aes(fill = shannon_index), color = "white") +
   scale_fill_gradient(name = "Índice de Shannon") +
