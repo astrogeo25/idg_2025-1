@@ -41,7 +41,7 @@ casen$e6a = as.numeric(unclass(casen$e6a))
 casen$sexo = as.integer(unclass(casen$sexo))
 casen$ypc = as.numeric(unclass(casen$ypc))
 casen$h7a = as.numeric(unclass(casen$h7a))
-casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
+casen$h7a <- ifelse(casen$h7a %in% c(1, 2), 1, 0)  # 1 para sano o levemente afectado, 0 para otros
 
 idx_na = which(is.na(casen$esc))
 fit = lm(esc ~ e6a, data = casen[-idx_na,])
@@ -74,7 +74,6 @@ casen$sexo_cat <- factor(
 # 4. Microsimulación
 cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
 inds_list = split(casen, casen$Comuna)
-
 sim_list = lapply(names(cons_censo_comunas), function(zona) {
   cons_i    = cons_censo_comunas[[zona]]
   col_order = sort(setdiff(names(cons_i), c("COMUNA","GEOCODIGO")))
@@ -106,7 +105,7 @@ zonas_stats <- aggregate(
 # Calcular indices mediante function(x) y elimnar valores vacíos
 zonas_stats <- within(zonas_stats, {
   tasa_vision = round(100 * sapply(h7a, function(x) sum(x == 0, na.rm = TRUE) / length(x)), 2)
-  tasa_mayores = round(100 * sapply(edad, function(x) sum(x >= 60, na.rm = TRUE) / length(x)), 2)
+  tasa_mayores = round(100 * sapply(edad, function(x) sum(x >= 40, na.rm = TRUE) / length(x)), 2)
   ingreso = round(sapply(ypc, function(x) mean(x, na.rm = TRUE)), 2)
 })
 # Agregar a un data frame
@@ -131,7 +130,6 @@ km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k determinado (3
 zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la tabla
 
 # 6. Mapa de correlaciones
-
 # 6.1 Seleccionar variables
 df_plot <- zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso", "cluster")]
 df_plot$cluster <- as.factor(df_plot$cluster) # Asegurar que 'cluster' sea un factor
@@ -165,12 +163,10 @@ dbWriteTable(
   row.names = FALSE
 )
 
-# Optimizar calculo y borrar tabla anterior (para agregar cluster)
-dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
+# 7.1 Crear tabla
+dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)") 
 dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
 dbExecute(con, "DROP TABLE IF EXISTS dpa.zonas_vision_vejez")
-
-# Crear tabla: variables, cluster, unir por geocódigo solo zonas urbanas
 dbExecute(con, "
   CREATE TABLE dpa.zonas_vision_vejez AS
   SELECT
@@ -186,22 +182,12 @@ dbExecute(con, "
     AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
 
-zonas_vision_sf <- st_read(con, query = "
+# Seleccionar variables del mapa
+sf_mapa <- st_read(con, query = "
   SELECT * FROM dpa.zonas_vision_vejez
 ")
 
-# 8. Visualizar mapa de clusters
-# 8.1 Leer geometría
-sql_mapa <- "
-SELECT *
-FROM dpa.zonas_vision_vejez
-WHERE urbano = 1
-  AND (nom_provin = 'SANTIAGO' OR nom_comuna IN ('SAN BERNARDO', 'PUENTE ALTO'));
-"
-
-sf_mapa <- st_read(con, query = sql_mapa)
-
-# Leer geometría de comunas para contexto
+# Seleccionar geometría de comunas para contexto
 sql_comunas <- "
 SELECT cut, nom_comuna, geom
 FROM dpa.comunas_rm_shp
@@ -209,10 +195,11 @@ WHERE nom_provin = 'SANTIAGO';
 "
 sf_comunas <- st_read(con, query = sql_comunas)
 
-# 8.2 Bounding box para acotar visualización
+# 8. Visualizar mapa de clusters
+# 8.1 Bounding box para acotar visualización
 bbox <- st_bbox(sf_mapa)
 
-# 8.3 Crear mapa de clusters
+# 8.2 Crear mapa de clusters
 mapa_clusters <- ggplot() +
   geom_sf(data = sf_mapa, aes(fill = as.factor(cluster)), color = NA) +
   geom_sf(data = sf_comunas, fill = NA, color = "black", size = 0.4) +

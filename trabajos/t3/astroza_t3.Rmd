@@ -26,6 +26,17 @@ Los problemas de vista son una condición de salud que afecta la calidad de vida
 
 Según la Organización Mundial de la Salud, la discapacidad visual representa una enorme carga económica mundial, con un costo anual en términos de productividad estimado en 411 mil millones de dólares, lo que sugiere que las personas con problemas visuales pueden enfrentar desventajas económicas importantes (OMS, 2023).
 
+Respecto al trabajo anterior, se redefinen las variables de estudio
+
+Se considera como población sana aqueyos que se encuentran sanos o presentan leves problemas (respuestas 1 y 2 de la CASEN)
+
+Luego se considera como población mayor la edad de 40 año pues en esta la visión de cerca comienza a fallar y las personas comienzan a necesitar lentes de lectura, esto es conocido como presbicia, la cuál ocurre cuando la capacidad de acomodación del cristalino (nuestro lente interno natural) comienza a disminuir progresivamente (Centro de la visión, 2023)
+
+Tasa de problemas de visón
+Tasa de población mayor
+
+
+
 # Marco teoríco
 
 El algoritmo k-means es un método de agrupamiento no supervisado que divide un conjunto de datos en "k" grupos (clusters) que presenten puntos similares entre sí. El objetivo del algoritmo es minimizar la suma de las distancias entre los puntos de datos y el centroide de su cluster, lo que permite obtener grupos compactos y bien definidos. Su funcionamiento básico consiste en:
@@ -72,12 +83,12 @@ library(RColorBrewer) # Paletas de colores
 
 Se realiza un preprocesamiento identico al del trabajo anterior. Este mismo se omite
 
-```{r preprocesado, echo=FALSE, message=FALSE, warning=FALSE}
+```{r preprocesado, message=FALSE, warning=FALSE, include=FALSE}
 # 2. Entradas
 
 ## df del censo ya procesado
-cons_censo_df <- readRDS("data/cons_censo_df.rds")
-casen_raw = readRDS("data/casen_rm.rds") 
+cons_censo_df <- readRDS("cons_censo_df.rds")
+casen_raw = readRDS("casen_rm.rds") 
 
 # 3. Preprocesamiento
 
@@ -102,7 +113,7 @@ casen$e6a = as.numeric(unclass(casen$e6a))
 casen$sexo = as.integer(unclass(casen$sexo))
 casen$ypc = as.numeric(unclass(casen$ypc))
 casen$h7a = as.numeric(unclass(casen$h7a))
-casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
+casen$h7a <- ifelse(casen$h7a %in% c(1, 2), 1, 0)  # 1 para sano o levemente afectado, 0 para otros
 
 idx_na = which(is.na(casen$esc))
 fit = lm(esc ~ e6a, data = casen[-idx_na,])
@@ -131,7 +142,6 @@ casen$sexo_cat <- factor(
          ifelse(casen$sexo == 1, sexo_levels[2], NA)), 
   levels = sexo_levels
 )
-
 # 4. Microsimulación
 cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
 inds_list = split(casen, casen$Comuna)
@@ -155,21 +165,24 @@ sim_list = lapply(names(cons_censo_comunas), function(zona) {
 })
 
 sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
+rm(sim_list)
 ```
 
-```{r k means, message=FALSE, warning=FALSE}
-# 4.1 Cálculo de métricas
+Sin embargo, las metricas se calculan de forma diferentes, pues se agrega la obtención de un ingreso promedio microsimulado
 
+```{r metricas, message=FALSE, warning=FALSE}
+# 5. Cálculo de métricas
 zonas_stats <- aggregate(
-  cbind(h7a, edad, ypc) ~ zone, # Incluir variables micro simular
+  cbind(h7a, edad, ypc) ~ zone, # Variables microsimuladas
   data = sim_df,
   FUN = function(x) x
 )
+rm(sim_df) # Descartar variable
 
-# Calcular indices mediante function(x) y elimnar valores vacíos
+# Calcular indices mediante funciones y elimnar valores vacíos
 zonas_stats <- within(zonas_stats, {
   tasa_vision = round(100 * sapply(h7a, function(x) sum(x == 0, na.rm = TRUE) / length(x)), 2)
-  tasa_mayores = round(100 * sapply(edad, function(x) sum(x >= 60, na.rm = TRUE) / length(x)), 2)
+  tasa_mayores = round(100 * sapply(edad, function(x) sum(x >= 40, na.rm = TRUE) / length(x)), 2)
   ingreso = round(sapply(ypc, function(x) mean(x, na.rm = TRUE)), 2)
 })
 # Agregar a un data frame
@@ -179,26 +192,28 @@ zonas_stats_df <- data.frame(
   tasa_mayores = zonas_stats$tasa_mayores,
   ingreso = zonas_stats$ingreso
 )
-
-# 5. Kmeans
 # Escalar variables de estudio
 vars_scaled <- scale(zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso")])
-
-# 5.1 Método del codo: Visualiza la suma de cuadrados dentro del cluster (WSS) para varios K
-fviz_nbclust(vars_scaled, kmeans, method = "wss") + # Datos, algoritmo, método de selección
-  labs(title = "Método del codo", x = "Número de clusters (K)", y = "WSS")
-
-# 5.2 Calcular kmeans
-set.seed(123)  # Para reproducibilidad
-km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k determinado (3)
-zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la tabla
 ```
 
 
-Lectura de Postgres de la variable
+```{r kmeans, message=FALSE, warning=FALSE}
+# 6. Kmeans
+# 6.1 Método del codo: Visualiza la suma de cuadrados dentro del cluster (WSS) para varios K
+fviz_nbclust(vars_scaled, kmeans, method = "wss") + # Datos, algoritmo, método de selección
+  labs(title = "Método del codo", x = "Número de clusters (K)", y = "WSS")
+
+# 6.2 Calcular kmeans
+set.seed(123)  # Para reproducibilidad
+km = kmeans(vars_scaled, centers = 3, nstart = 25) # Introducir k determinado (3)
+zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la tabla
+rm(vars_scaled)
+```
+
+Creación de un mapa de correlaciones
 
 ```{r postgres, message=FALSE, warning=FALSE}
-# 5. Conexión con Postgres
+# 7. Conexión con Postgres
 con <- dbConnect(
   Postgres(),
   dbname = "censo_rm_2017",
@@ -208,7 +223,6 @@ con <- dbConnect(
   password = "postgres"
 )
 
-
 dbWriteTable(
   conn = con,
   name = Id(schema = "dpa", table = "tmp_vision_vejez_rm"),
@@ -217,38 +231,157 @@ dbWriteTable(
   row.names = FALSE
 )
 
+# 7.1 Crear tabla optimizando con indice y descartando tabla anterior
 dbExecute(con, "CREATE INDEX ON dpa.tmp_vision_vejez_rm(geocodigo)")
 dbExecute(con, "ANALYZE dpa.tmp_vision_vejez_rm")
-
-# Crear tabla que agrupe tasas de problemas de visión, adultos mayores por zona censal en PGAdmin
+dbExecute(con, "DROP TABLE IF EXISTS dpa.zonas_vision_vejez")
 dbExecute(con, "
-  CREATE TABLE IF NOT EXISTS dpa.zonas_vision_vejez AS
+  CREATE TABLE dpa.zonas_vision_vejez AS
   SELECT
     z.*,
-    t.pct_problemas_vision AS vision,
-    t.pct_mayores_60 AS vejez
+    t.tasa_vision AS vision,
+    t.tasa_mayores AS vejez,
+    t.ingreso AS ingreso,
+    t.cluster
   FROM dpa.zonas_censales_rm AS z
   LEFT JOIN dpa.tmp_vision_vejez_rm AS t
     ON z.geocodigo::text = t.geocodigo
-  WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
+  WHERE urbano = 1
+    AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
 
-zonas_vision_sf <- st_read(con, query = "
+# Seleccionar variables del mapa
+sf_mapa <- st_read(con, query = "
   SELECT * FROM dpa.zonas_vision_vejez
 ")
+
+# Seleccionar geometría de comunas
+sql_comunas <- "
+SELECT cut, nom_comuna, geom
+FROM dpa.comunas_rm_shp
+WHERE nom_provin = 'SANTIAGO';
+"
+sf_comunas <- st_read(con, query = sql_comunas)
 ```
 
+Se genera un indice de shannon que permite ver la variabilidad en el mapa
+
+```{r shannoni, message=FALSE, warning=FALSE}
+# 8. Generar indices de Shannon
+# 8.1 Crear la tabla con el conteo de clusters por comuna
+tabla_shannon <- sf_mapa |>
+  st_drop_geometry() |>
+  count(nom_comuna, cluster) |>
+  filter(!is.na(nom_comuna)) |>
+  tidyr::pivot_wider(names_from = cluster, values_from = n, values_fill = 0) |>
+  column_to_rownames("nom_comuna")
+
+# 8.2 Calcular el índice de Shannon para cada comuna
+shannon <- diversity(tabla_shannon, index = "shannon")
+
+# Crear un data frame con el índice de Shannon por comuna y unir por comuna
+df_shannon <- data.frame(
+  nom_comuna = names(shannon),
+  shannon_index = shannon
+)
+sf_comunas_shannon <- merge(sf_comunas, df_shannon, by = "nom_comuna")
+```
+
+
+# Resultados
+
+A continuación se presentan los gráficos de correlaciones, seguido del mapa de variables agrupadas y el mapa de variabilidad para las variables estudiadas.
+
+```{r correlaciones, echo=FALSE, message=FALSE, warning=FALSE}
+# 9. Mapa de correlaciones
+df_plot <- zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso", "cluster")] # Seleccionar variables
+df_plot$cluster <- as.factor(df_plot$cluster) # Transformar a factor
+
+# 9.1 Crear el gráfico de correlaciones
+p = ggpairs(
+  df_plot,
+  columns = 1:3,  # Variables numéricas (sin 'cluster')
+  mapping = aes(color = cluster),  # Colorear por cluster
+  upper = list(continuous = "points"),  # Gráfico de puntos en la parte superior
+  lower = list(continuous = "points"),  # Gráfico de puntos en la parte inferior
+  diag  = list(continuous = "densityDiag")  # Gráfico de densidad en la diagonal
+)
+print(p)
+```
+
+```{r clusters, echo=FALSE, message=FALSE, warning=FALSE}
+# 10. Visualizar mapa de clusters
+bbox <- st_bbox(sf_mapa) # Bounding box para acotar visualización
+mapa_clusters <- ggplot() +
+  geom_sf(data = sf_mapa, aes(fill = as.factor(cluster)), color = NA) +
+  geom_sf(data = sf_comunas, fill = NA, color = "black", size = 0.4) +
+  geom_sf_text(data = st_centroid(sf_comunas), aes(label = nom_comuna), size = 2, fontface = "bold") +
+  scale_fill_brewer(palette = "Set2", name = "Cluster") +
+  labs(
+    title = "Mapa de Clusters de Zonas Censales",
+    subtitle = "Provincia de Santiago, Región Metropolitana"
+  ) +
+  coord_sf(
+    xlim = c(bbox["xmin"], bbox["xmax"]),
+    ylim = c(bbox["ymin"], bbox["ymax"]),
+    expand = FALSE
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  )
+
+print(mapa_clusters)
+```
+
+```{r shannon, echo=FALSE, message=FALSE, warning=FALSE}
+# 11. Gráfico del índice de Shannon por comuna
+ggplot(sf_comunas_shannon) +
+  geom_sf(aes(fill = shannon_index), color = "white") +
+  scale_fill_gradient(name = "Índice de Shannon") +
+  labs(
+    title = "Variabilidad interna de clusters por comuna",
+    subtitle = "Índice de diversidad (mayor = más heterogénea)"
+  ) +
+  theme_minimal()
+```
 
 
 # Analisis
 
+## Analisis de clústers y correlaciones
 
+El gráfico del método del codo tiene una ruptura al 4 clúster, por ende se agruparan 3 grupos. Si analizamos las carácteristicas de estos grupos es posible caracterizarlos de la siguiente manera:
+
+Grupo Rojo
+Alta tasa de problemas de visión
+Tasa moderada de personas mayores de 40 años
+Ingreso bajo
+
+Este grupo podría representar zonas con menor acceso a servicios de salud o mayor vulnerabilidad socioeconómica.
+
+Grupo Azul
+Baja tasa de problemas de visión
+Alta proporción de personas mayores de 40 años
+Ingreso medio (amplia variación)
+
+Podría representar comunidades con envejecimiento poblacional, pero con mejores condiciones de salud visual y cierto rango de ingresos.
+
+Grupo Verde
+Tasa moderada de problemas de visión
+Baja proporción de mayores de 40 años
+Ingreso alto
+
+Este grupo parece corresponder a zonas más jóvenes y con mayores ingresos, lo que podría estar asociado a un mejor acceso a atención preventiva.
+
+## Analisis del mapa agrupado
+
+## Analisis del mapa 
 
 # Conclusión
 
-Este estudio permitió correlacionar y visualizar los indices de vejez y problemas visuales de la población de la Región Metropolitana. Se puede concluir que las zonas más afectas son la comuna de Recoleta, toda la zona Oeste y sectores específicos de la zona sur, en los cuales se debería emplear políticas públicas de prevención (para las zonas moradas) y atención médica (para zonas azules).
-
-La microsimulación es de gran ayuda para investigar casos especiales como Maipú o San Bernardo los cuales tienen zonas censales donde agudiza el problema, las cuales pasaría por alto si se estudiara a nivel comuna sin microsimular.
+Aprovenchando la micrsimulación 
 
 # Bibliografía
 
