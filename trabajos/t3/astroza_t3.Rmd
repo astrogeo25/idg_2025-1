@@ -22,7 +22,7 @@ Facilitar la segmentación de datos en grupos homogéneos, lo que ayuda a entend
 
 La Región Metropolitana es la zona con mayor concentración poblacional y diversidad socioeconómica, lo que implica heterogeneidad en la prevalencia y acceso a servicios de salud visual.
 
-Los problemas de vista son una condición de salud que afecta la calidad de vida y la productividad. 
+Los problemas de vista son una condición de salud que afecta la calidad de vida y la productividad.
 
 Según la Organización Mundial de la Salud, la discapacidad visual representa una enorme carga económica mundial, con un costo anual en términos de productividad estimado en 411 mil millones de dólares, lo que sugiere que las personas con problemas visuales pueden enfrentar desventajas económicas importantes (OMS, 2023).
 
@@ -32,34 +32,37 @@ Se considera como población sana aqueyos que se encuentran sanos o presentan le
 
 Luego se considera como población mayor la edad de 40 año pues en esta la visión de cerca comienza a fallar y las personas comienzan a necesitar lentes de lectura, esto es conocido como presbicia, la cuál ocurre cuando la capacidad de acomodación del cristalino (nuestro lente interno natural) comienza a disminuir progresivamente (Centro de la visión, 2023)
 
-Tasa de problemas de visón
-Tasa de población mayor
-
-
+Tasa de problemas de visón Tasa de población mayor
 
 # Marco teoríco
 
-El algoritmo k-means es un método de agrupamiento no supervisado que divide un conjunto de datos en "k" grupos (clusters) que presenten puntos similares entre sí. El objetivo del algoritmo es minimizar la suma de las distancias entre los puntos de datos y el centroide de su cluster, lo que permite obtener grupos compactos y bien definidos. Su funcionamiento básico consiste en:
-- Elegir k centroides iniciales (puntos centrales de cada grupo), generalmente de forma aleatoria.
+El algoritmo k-means es un método de agrupamiento no supervisado que divide un conjunto de datos en "k" grupos (clusters) que presenten puntos similares entre sí.
+El objetivo del algoritmo es minimizar la suma de las distancias entre los puntos de datos y el centroide de su cluster, lo que permite obtener grupos compactos y bien definidos.
+Su funcionamiento básico consiste en: - Elegir k centroides iniciales (puntos centrales de cada grupo), generalmente de forma aleatoria.
 - Asignar cada punto de datos al cluster cuyo centroide esté más cercano, usando una medida de distancia (normalmente euclidiana).
 - Recalcular los centroides como la media de los puntos asignados a cada cluster.
 - Repetir los pasos 2 y 3 hasta que los centroides ya no cambien o se alcance un número máximo de iteraciones.
 
 # Area de estudio
 
-Según proyecciones del Instituto Nacional de Estadísticas (INE) para 2025 la región tendrá 8.47 millones de habitantes aproximadamente, representando el 41.9% de la población total del país. La distribución por sexo es equilibrada, con un 50.5% mujeres y 49.5% hombres. En términos de edad, el 16.8% serán menores de 14 años, el 4.8% adolescentes (14-17 años), y un 18% adultos mayores (60 años o más), evidenciando una población con un importante segmento envejecido.
+Según proyecciones del Instituto Nacional de Estadísticas (INE) para 2025 la región tendrá 8.47 millones de habitantes aproximadamente, representando el 41.9% de la población total del país.
+La distribución por sexo es equilibrada, con un 50.5% mujeres y 49.5% hombres.
+En términos de edad, el 16.8% serán menores de 14 años, el 4.8% adolescentes (14-17 años), y un 18% adultos mayores (60 años o más), evidenciando una población con un importante segmento envejecido.
 
-La Región Metropolitana es el principal motor económico del país, concentrando gran parte de la actividad productiva nacional. Destacan sectores como comercio, construcción, servicios profesionales, financieros e industria manufacturera. La región atrae inversiones públicas y privadas que impulsan el desarrollo urbano y económico generando oportunidades laborales diversas.
+La Región Metropolitana es el principal motor económico del país, concentrando gran parte de la actividad productiva nacional.
+Destacan sectores como comercio, construcción, servicios profesionales, financieros e industria manufacturera.
+La región atrae inversiones públicas y privadas que impulsan el desarrollo urbano y económico generando oportunidades laborales diversas.
 
-Los niveles de pobreza son relativamente bajos en comparación con el resto del país, pero con heterogeneidades internas. La pobreza por ingresos en algunas comunas es baja más la pobreza multidimensional (que considera acceso a educación, salud, vivienda y otros servicios) es más dispar ciertos sectores.
+Los niveles de pobreza son relativamente bajos en comparación con el resto del país, pero con heterogeneidades internas.
+La pobreza por ingresos en algunas comunas es baja más la pobreza multidimensional (que considera acceso a educación, salud, vivienda y otros servicios) es más dispar ciertos sectores.
 
 Considerando lo anterior se puede dividir geograficamente la región de la siguiente manera.
 
-- Zona Centro: Suele concentrar actividades comerciales y administrativas, con ingresos variables, pero en general presenta un nivel medio de ingresos.
-- Zona Norte: Tiene una mezcla de sectores industriales y residenciales, con ingresos que pueden ser medios a bajos.
-- Zona Sur: Predominan sectores con ingresos medios a bajos, con mayor presencia de población con educación básica incompleta.
-- Zona Este: Es la zona con mayores ingresos promedio, alta escolaridad y mejor acceso a servicios, caracterizada por un nivel socioeconómico alto.
-- Zona Oeste: Presenta ingresos medios a bajos, con una mayor proporción de población con menor nivel educacional y mayor vulnerabilidad social.
+-   Zona Centro: Suele concentrar actividades comerciales y administrativas, con ingresos variables, pero en general presenta un nivel medio de ingresos.
+-   Zona Norte: Tiene una mezcla de sectores industriales y residenciales, con ingresos que pueden ser medios a bajos.
+-   Zona Sur: Predominan sectores con ingresos medios a bajos, con mayor presencia de población con educación básica incompleta.
+-   Zona Este: Es la zona con mayores ingresos promedio, alta escolaridad y mejor acceso a servicios, caracterizada por un nivel socioeconómico alto.
+-   Zona Oeste: Presenta ingresos medios a bajos, con una mayor proporción de población con menor nivel educacional y mayor vulnerabilidad social.
 
 # Desarrollo
 
@@ -81,7 +84,8 @@ library(tibble)      # Para tibble
 library(RColorBrewer) # Paletas de colores
 ```
 
-Se realiza un preprocesamiento identico al del trabajo anterior. Este mismo se omite
+Se realiza un preprocesamiento identico al del trabajo anterior.
+Este mismo se omite
 
 ```{r preprocesado, message=FALSE, warning=FALSE, include=FALSE}
 # 2. Entradas
@@ -196,7 +200,6 @@ zonas_stats_df <- data.frame(
 vars_scaled <- scale(zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso")])
 ```
 
-
 ```{r kmeans, message=FALSE, warning=FALSE}
 # 6. Kmeans
 # 6.1 Método del codo: Visualiza la suma de cuadrados dentro del cluster (WSS) para varios K
@@ -287,7 +290,6 @@ df_shannon <- data.frame(
 sf_comunas_shannon <- merge(sf_comunas, df_shannon, by = "nom_comuna")
 ```
 
-
 # Resultados
 
 A continuación se presentan los gráficos de correlaciones, seguido del mapa de variables agrupadas y el mapa de variabilidad para las variables estudiadas.
@@ -347,46 +349,50 @@ ggplot(sf_comunas_shannon) +
   theme_minimal()
 ```
 
-
 # Analisis
 
 ## Analisis de clústers y correlaciones
 
-El gráfico del método del codo tiene una ruptura al 4 clúster, por ende se agruparan 3 grupos. Si analizamos las carácteristicas de estos grupos es posible caracterizarlos de la siguiente manera:
+El gráfico del método del codo tiene una ruptura al 4 clúster, por ende se agruparan 3 grupos.
+Al analizar los gráficos de dispersión es posible caracterizar de la siguiente forma:
 
-Grupo Rojo
-Alta tasa de problemas de visión
-Tasa moderada de personas mayores de 40 años
-Ingreso bajo
+| Cluster   | Tasa de Visión | Proporción \>40 años | Ingreso    |
+|-----------|----------------|----------------------|------------|
+| 1 (Verde) | Baja           | Alta                 | Medio-bajo |
+| 2 (Rojo) | Alta           | Baja                 | Bajo       |
+| 3 (Azul) | Baja           | Media                 | Alto       |
 
-Este grupo podría representar zonas con menor acceso a servicios de salud o mayor vulnerabilidad socioeconómica.
+El cluster 1 son zonas con mayor proporción de adultos mayores, pero con una menor prevalencia de problemas visuales. Posee ingresos bajos, similar al grupo 2.
 
-Grupo Azul
-Baja tasa de problemas de visión
-Alta proporción de personas mayores de 40 años
-Ingreso medio (amplia variación)
+El cluster 2 destaca por poseer mayores problemas visuales, siendo la única que alcanza picos sobre 20% pero más la población de mayores es la menor de los grupos. Presenta los ingresos más bajos, más no dista del grupo 1.
 
-Podría representar comunidades con envejecimiento poblacional, pero con mejores condiciones de salud visual y cierto rango de ingresos.
-
-Grupo Verde
-Tasa moderada de problemas de visión
-Baja proporción de mayores de 40 años
-Ingreso alto
-
-Este grupo parece corresponder a zonas más jóvenes y con mayores ingresos, lo que podría estar asociado a un mejor acceso a atención preventiva.
+El cluster 3 destaca por presentar los ingresos más altos, sin embargo su distribución no es normal, indicando variabilidad en los mismos. La proporción de adultos mayores y problemas de visión es media comparando con los otros grupos.
 
 ## Analisis del mapa agrupado
 
-## Analisis del mapa 
+La zona norte
+
+## Analisis del mapa
 
 # Conclusión
 
-Aprovenchando la micrsimulación 
+Aprovenchando la micrsimulación
 
 # Bibliografía
 
-Telencuestas. (2023, agosto 29). Población de la Región Metropolitana de Santiago en 2025. Telencuestas. https://telencuestas.com/censos-de-poblacion/chile/2025/metropolitana-de-santiago
+Telencuestas.
+(2023, agosto 29).
+Población de la Región Metropolitana de Santiago en 2025.
+Telencuestas.
+<https://telencuestas.com/censos-de-poblacion/chile/2025/metropolitana-de-santiago>
 
-Ministerio de Desarrollo Social y Familia. (2020). Índice de prioridad social 2020 [Informe]. Gobierno de Chile. https://www.desarrollosocialyfamilia.gob.cl/storage/docs/boletin_interno/INDICE_DE_PRIORIDAD_SOCIAL_2020(1).pdf
+Ministerio de Desarrollo Social y Familia.
+(2020).
+Índice de prioridad social 2020 [Informe].
+Gobierno de Chile.
+[https://www.desarrollosocialyfamilia.gob.cl/storage/docs/boletin_interno/INDICE_DE_PRIORIDAD_SOCIAL_2020(1).pdf](https://www.desarrollosocialyfamilia.gob.cl/storage/docs/boletin_interno/INDICE_DE_PRIORIDAD_SOCIAL_2020(1).pdf){.uri}
 
-World Health Organization: WHO. (2023, 10 agosto). Ceguera y discapacidad visual. https://www.who.int/es/news-room/fact-sheets/detail/blindness-and-visual-impairment
+World Health Organization: WHO.
+(2023, 10 agosto).
+Ceguera y discapacidad visual.
+<https://www.who.int/es/news-room/fact-sheets/detail/blindness-and-visual-impairment>
