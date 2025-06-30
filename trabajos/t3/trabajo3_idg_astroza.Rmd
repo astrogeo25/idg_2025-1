@@ -8,15 +8,13 @@ editor_options:
     wrap: sentence
 ---
 
-# Intoducción
+# Introducción
 
-Para este trabajo se propone rautilizar la variable problemas de visión (variable h7a de la CASEN) estudiada en el trabajo 2.
+Para este trabajo se va a reutilizar la variable problemas de visión (variable h7a de la CASEN) del trabajo 2 con el fin de correlacionar con las variables edad e ingreso y asignar correlaciones específicas a grupos fácilmente localizables en el espacio mediante la aplicación del algoritmo de k-means que permite identificar patrones y estructuras ocultas en datos no etiquetados, agrupando observaciones similares.
 
-K-means es muy útil para analizar la distribución de variables porque permite:
+Este estudio permite entender cómo se distribuyen las variables en diferentes subpoblaciones o clusters.
 
-Identificar patrones y estructuras ocultas en datos no etiquetados, agrupando observaciones similares.
-
-Facilitar la segmentación de datos en grupos homogéneos, lo que ayuda a entender cómo se distribuyen las variables en diferentes subpoblaciones o clusters.
+La hipótesis del trabajo es que es la población mayor de menores ingresos la que presentaría mayores índices de problemas de visión.
 
 # Justificación de la elección
 
@@ -26,22 +24,45 @@ Los problemas de vista son una condición de salud que afecta la calidad de vida
 
 Según la Organización Mundial de la Salud, la discapacidad visual representa una enorme carga económica mundial, con un costo anual en términos de productividad estimado en 411 mil millones de dólares, lo que sugiere que las personas con problemas visuales pueden enfrentar desventajas económicas importantes (OMS, 2023).
 
-Respecto al trabajo anterior, se redefinen las variables de estudio
+## Variables de estudio
 
-Se considera como población sana aqueyos que se encuentran sanos o presentan leves problemas (respuestas 1 y 2 de la CASEN)
+Respecto al trabajo anterior, se redefinen las variables de estudio.
 
-Luego se considera como población mayor la edad de 40 año pues en esta la visión de cerca comienza a fallar y las personas comienzan a necesitar lentes de lectura, esto es conocido como presbicia, la cuál ocurre cuando la capacidad de acomodación del cristalino (nuestro lente interno natural) comienza a disminuir progresivamente (Centro de la visión, 2023)
+Se considera como población sana aquellos que se encuentran sanos o presentan leves problemas (respuestas 1 y 2 de la CASEN).
 
-Tasa de problemas de visón Tasa de población mayor
+Luego se considera como población mayor la edad de 40 año pues en esta la visión de cerca comienza a fallar y las personas comienzan a necesitar lentes de lectura, esto es conocido como presbicia, la cuál ocurre cuando la capacidad de acomodación del cristalino (nuestro lente interno natural) comienza a disminuir progresivamente (Centro de la visión, 2023).
 
-# Marco teoríco
+Tasa de visión: $$\text{Tasa de problemas de vision} = 100 \cdot \frac{\sum{x = 0}}{n}$$
 
-El algoritmo k-means es un método de agrupamiento no supervisado que divide un conjunto de datos en "k" grupos (clusters) que presenten puntos similares entre sí.
+X: Valores de "h7a".
+n: Total de población.
+
+Tasa de mayores de 40 años: $$\text{Tasa de mayores} = 100 \cdot \frac{\sum{x \geq 40}}{n}$$
+
+X: Valores de "edad".
+n: Total de población.
+
+Ingreso promedio: $$\text{Ingreso promedio} = \frac{\sum{x}}{n}$$
+
+X: Valores de "ypc".
+n: Total de población.
+
+# Marco teórico
+
+El algoritmo k-means es un método de agrupamiento no supervisado que divide un conjunto de datos en "k" grupos (clusters) que presentan puntos similares entre sí.
 El objetivo del algoritmo es minimizar la suma de las distancias entre los puntos de datos y el centroide de su cluster, lo que permite obtener grupos compactos y bien definidos.
 Su funcionamiento básico consiste en: - Elegir k centroides iniciales (puntos centrales de cada grupo), generalmente de forma aleatoria.
 - Asignar cada punto de datos al cluster cuyo centroide esté más cercano, usando una medida de distancia (normalmente euclidiana).
 - Recalcular los centroides como la media de los puntos asignados a cada cluster.
 - Repetir los pasos 2 y 3 hasta que los centroides ya no cambien o se alcance un número máximo de iteraciones.
+
+El índice de Shannon (también conocido como entropía de Shannon) es una medida de diversidad que se puede aplicar al análisis de agrupamientos (clustering) como el de k-means para evaluar la diversidad o heterogeneidad dentro de un grupo o zona.
+
+$$H = -\sum_{i=1}^{k} p_i \cdot \log_2(p_i)$$
+Donde:
+H: Índice de Shannon (entropía)
+k: Número total de clústers
+pi: Proporción de elementos que pertenecen al clúster 
 
 # Area de estudio
 
@@ -54,9 +75,9 @@ Destacan sectores como comercio, construcción, servicios profesionales, financi
 La región atrae inversiones públicas y privadas que impulsan el desarrollo urbano y económico generando oportunidades laborales diversas.
 
 Los niveles de pobreza son relativamente bajos en comparación con el resto del país, pero con heterogeneidades internas.
-La pobreza por ingresos en algunas comunas es baja más la pobreza multidimensional (que considera acceso a educación, salud, vivienda y otros servicios) es más dispar ciertos sectores.
+La pobreza por ingresos en algunas comunas es baja más la pobreza multidimensional (que considera acceso a educación, salud, vivienda y otros servicios) es más dispar en ciertos sectores.
 
-Considerando lo anterior se puede dividir geograficamente la región de la siguiente manera.
+Considerando lo anterior se puede dividir geográficamente la región de la siguiente manera.
 
 -   Zona Centro: Suele concentrar actividades comerciales y administrativas, con ingresos variables, pero en general presenta un nivel medio de ingresos.
 -   Zona Norte: Tiene una mezcla de sectores industriales y residenciales, con ingresos que pueden ser medios a bajos.
@@ -66,7 +87,7 @@ Considerando lo anterior se puede dividir geograficamente la región de la sigui
 
 # Desarrollo
 
-Para realizar estre trabajo se consideran las siguientes librerias que permiten conectar con Postgres para una mejor consulta de datos, microsimular y generar mapas.
+Para realizar estre trabajo se consideran las siguientes librerías que permiten conectar con Postgres para una mejor consulta de datos, microsimular y generar mapas.
 
 ```{r lib, message=FALSE, warning=FALSE}
 # 1. Librerías
@@ -85,7 +106,7 @@ library(RColorBrewer) # Paletas de colores
 ```
 
 Se realiza un preprocesamiento identico al del trabajo anterior.
-Este mismo se omite
+Este mismo se omite, sin embargo vale comentar que se redefine h7a para tomar como "1" los valores 1 y 2 y "0" los valores 3 y 4.
 
 ```{r preprocesado, message=FALSE, warning=FALSE, include=FALSE}
 # 2. Entradas
@@ -172,7 +193,7 @@ sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
 rm(sim_list)
 ```
 
-Sin embargo, las metricas se calculan de forma diferentes, pues se agrega la obtención de un ingreso promedio microsimulado
+Sin embargo, las métricas se calculan de forma diferente, pues se agrega la obtención de un ingreso promedio microsimulado, por ende esta parte si se muestra.
 
 ```{r metricas, message=FALSE, warning=FALSE}
 # 5. Cálculo de métricas
@@ -200,6 +221,8 @@ zonas_stats_df <- data.frame(
 vars_scaled <- scale(zonas_stats_df[, c("tasa_vision", "tasa_mayores", "ingreso")])
 ```
 
+Se aplica el método del codo para determinar el número de clústers a trabajar. Este consiste en ver dónde el gráfico posee la mayor variación de pendiente para seleccionar dicho punto. Además se escalan las variables para que no predomine una sobre otra al agrupar.
+
 ```{r kmeans, message=FALSE, warning=FALSE}
 # 6. Kmeans
 # 6.1 Método del codo: Visualiza la suma de cuadrados dentro del cluster (WSS) para varios K
@@ -213,7 +236,7 @@ zonas_stats_df$cluster = as.factor(km$cluster) # Agregar número de cluster a la
 rm(vars_scaled)
 ```
 
-Creación de un mapa de correlaciones
+Creación de un mapa de correlaciones mediante consulta PGAdmin para vincular con la geometría según la variable "gecódigo".
 
 ```{r postgres, message=FALSE, warning=FALSE}
 # 7. Conexión con Postgres
@@ -267,7 +290,7 @@ WHERE nom_provin = 'SANTIAGO';
 sf_comunas <- st_read(con, query = sql_comunas)
 ```
 
-Se genera un indice de shannon que permite ver la variabilidad en el mapa
+Se genera un indice de shannon que permite ver la variabilidad en el mapa.
 
 ```{r shannoni, message=FALSE, warning=FALSE}
 # 8. Generar indices de Shannon
@@ -349,34 +372,74 @@ ggplot(sf_comunas_shannon) +
   theme_minimal()
 ```
 
-# Analisis
+# Análisis
+## Análisis de clústers y correlaciones
 
-## Analisis de clústers y correlaciones
+Similar al trabajo anterior, las tasas de problemas de visión varian entre 0% y 20%, siendo bajas en general, mientras que las tasas de adultos mayores se mueven entre 10% y 60%.
+Los ingresos si tienen una gran variabilidad.
 
 El gráfico del método del codo tiene una ruptura al 4 clúster, por ende se agruparan 3 grupos.
-Al analizar los gráficos de dispersión es posible caracterizar de la siguiente forma:
 
-| Cluster   | Tasa de Visión | Proporción \>40 años | Ingreso    |
-|-----------|----------------|----------------------|------------|
-| 1 (Verde) | Baja           | Alta                 | Medio-bajo |
-| 2 (Rojo) | Alta           | Baja                 | Bajo       |
-| 3 (Azul) | Baja           | Media                 | Alto       |
+Analizar los gráficos de dispersión es posible caracterizar de la siguiente forma, considerando los términos "bajos-altos" según los rangos porcentuales descritos:
 
-El cluster 1 son zonas con mayor proporción de adultos mayores, pero con una menor prevalencia de problemas visuales. Posee ingresos bajos, similar al grupo 2.
 
-El cluster 2 destaca por poseer mayores problemas visuales, siendo la única que alcanza picos sobre 20% pero más la población de mayores es la menor de los grupos. Presenta los ingresos más bajos, más no dista del grupo 1.
+| Cluster   | Tasa de Visión | Proporción \>40 años | Ingreso |
+|-----------|----------------|----------------------|---------|
+| 1 (Verde) | Baja           | Alta                 | Bajo    |
+| 2 (Rojo)  | Alta           | Baja                 | Bajo    |
+| 3 (Azul)  | Baja           | Media                | Alto    |
 
-El cluster 3 destaca por presentar los ingresos más altos, sin embargo su distribución no es normal, indicando variabilidad en los mismos. La proporción de adultos mayores y problemas de visión es media comparando con los otros grupos.
+El cluster 1 son zonas con mayor proporción de adultos mayores, pero con una menor prevalencia de problemas visuales.
+Posee ingresos bajos, similar al grupo 2.
 
-## Analisis del mapa agrupado
+El cluster 2 destaca por poseer mayores problemas visuales, siendo la única que alcanza picos sobre 20% pero la población de mayores es la menor de los grupos.
+Presenta los ingresos más bajos, más no dista del grupo 1.
 
-La zona norte
+El cluster 3 destaca por presentar los ingresos más altos, sin embargo su distribución no es normal, indicando variabilidad en los mismos.
+La proporción de adultos mayores y problemas de visión es media comparando con los otros grupos.
 
-## Analisis del mapa
+## Análisis del mapa agrupado
+
+La zona norte posee una importante división respecto al trabajo 2.
+Predomina el grupo 1 al oeste, con incrustaciones del grupo 2 a medida que se "baja al sur". En estos sectores hay población más vieja, pero con bajos índices de problemas de salud, lo que indica una mejor calidad de vida para estos.
+
+En el noreste predomina notablemente el grupo 3, siendo el área más uniforme del mapa. Es importante recalcar que este grupo posee la mayor variación de ingresos a pesar de tener mayor promedio. Se puede decir que acá el factor ingreso podría ser menos relevante y otras variables como conectividad o educación influyen en tener menores problemas tanto para jóvenes como adultos.
+
+Respecto a la zona centro predomina el cluster 1 solo en la comuna de Santiago, esto indicaría que en la comuna de Santiago que pese a tener mayor proporción de adultos mayores e ingresos bajos su buena conectividad ofrece una mejor respuesta a la prevención de problemas.
+
+Comunas aledañas (sin contar noreste) y casi la totalidad del sur predomina el cluster 2. Este grupo se caracteriza por alcanzar los ingresos más bajos, mayores tasas de problemas de visión y población más joven.
+
+Como se comentó en la justificación de la variable, los problemas de visión suelen aparecer a los 40 años pero también se pueden desarrollar en edades jóvenes, siendo el caso de este grupo. Además de el factor acceso a la salud (ya sea por conectividad e ingreso) la educación también es fundamental para prevenir, por lo que se justifica la correlación presente.
+
+Hacia el sur se presenta el cluster 1, reforzando que más personas jóvenes presentan estos problemas.
+
+## Análisis del mapa de variabilidad
+
+El gran polígono grande no corresponde al área de estudio y no se considera.
+
+Las Condes, Ñuñoa y Providencia son las comunas con menos variabilidad, en este caso del cluster 3, presentando mayores ingresos y mejor calidad de vida respecto a la salud en visión.
+
+La Florida y Peñalolén presenta baja variabilidad, en este caso del cluster 2.
+
+El resto de la región presenta una alta variabilidad, especialmente en comunas aledañas a Santiago, variando entre los cluster 1 y 2, que son similares en ingresos pero discrepan en edad y salud visual.
+Destaca San Ramón con una alta homogeneidad, en este caso del cluster 2, siendo la comuna que presenta mayores problemas junto a menor proporción de mayores a 40 años.
 
 # Conclusión
 
-Aprovenchando la micrsimulación
+Este trabajo permitió correlacionar 3 variables de la CASEN, estudiarlas a nivel zona censal y generar 3 grupos (determinados mediante el método del codo) mediantes el procedimiento de k-means
+
+El Cluster 3 muestra mejores condiciones generales de vida con menores problemas visuales, edad variable y alta heterogeneidad en ingresos con un promedio alto, sugiriendo que factores como educación, infraestructura y acceso a salud también juegan un rol protector.
+
+Por otro lado, el Cluster 2 (predominante en el sur y áreas periféricas) representa zonas con un desafío social único: es población más joven de ingresos más bajos la que presenta altos niveles de problemas visuales, rechazando la hipótesis.
+
+Estas características reflejan una mayor vulnerabilidad estructural, posiblemente influenciada por el menor acceso a servicios de salud, educación y prevención.
+También señala la urgencia de atender estos problemas en población joven, destacando la comuna de San Ramón
+
+El Cluster 1, con características intermedias, destaca por su alta proporción de adultos mayores pero menor prevalencia de problemas visuales, lo que podría reflejar una cierta estabilidad pese a sus bajos ingresos.
+
+Territorialmente, se identifican patrones espaciales coherentes con la desigualdad estructural ya conocida en Santiago: un noreste consolidado y de alto bienestar, un centro mixto y con signos de envejecimiento positivo y un sur vulnerable donde confluyen juventud, pobreza y mayores riesgos sanitarios.
+
+Se deberían aplicar políticas especialmente a la zona centro sur enfocadas en personas jóvenes. Para futuras investigaciones es posible llevar estos mapas a formato JSON para estudiarlos en plataformas GIS, así como considerar otras variables, como el sexo o nivel educacional, pues este último pareciera ser relevante.
 
 # Bibliografía
 
@@ -396,3 +459,9 @@ World Health Organization: WHO.
 (2023, 10 agosto).
 Ceguera y discapacidad visual.
 <https://www.who.int/es/news-room/fact-sheets/detail/blindness-and-visual-impairment>
+
+Centro de la Visión.
+(2024, marzo).
+Chequeos de la visión según la edad.
+Centro de la Visión.
+<https://centrodelavision.cl/sn/chequeos-de-la-vision-segun-la-edad/>
