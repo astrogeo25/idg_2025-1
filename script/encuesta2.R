@@ -43,27 +43,28 @@ personas_gs$gasto_ch[is.na(personas_gs$gasto_ch)] <- 0
 
 # --- SELECCIÓN DE VARIABLES FINALES ---
 tabla_og <- personas_gs[, c("sexo", "edad", "edue", "ing_pc", "gasto_ch")]
-df_og <- tabla_og[tabla_og$gasto_ch > 0, ] # Quitar gastos 0
+tabla_gasto <- tabla_og[tabla_og$gasto_ch > 0, ] # Quitar gastos 0
 rm(tabla_og)
 
 # --- GRAFICOS EXPLORATORIOS ---
 # Variables: ing_pc, gasto, sexo
-hist(df_og$ing_pc, breaks = 30, col = "lightblue", main = "Distribución del Ingreso", xlab = "Ingreso per cápita")
-hist(df_og$gasto, breaks = 30, col = "lightblue", main = "Distribución del Gasto en producto", xlab = "Gasto en chocolates")
+hist(tabla_gasto$ing_pc, breaks = 30, col = "lightblue", main = "Distribución del Ingreso", xlab = "Ingreso per cápita")
+hist(tabla_gasto$gasto, breaks = 30, col = "lightblue", main = "Distribución del Gasto en producto", xlab = "Gasto en chocolates")
 
-boxplot(gasto_ch ~ factor(sexo), data = df_og, main = "Gasto en Servicio según Sexo", xlab = "Sexo", col = c("tomato", "lightgreen"))
+boxplot(gasto_ch ~ factor(sexo), data = tabla_gasto, main = "Gasto en Servicio según Sexo", xlab = "Sexo", col = c("tomato", "lightgreen"))
 
-plot(df_og$edad, df_og$gasto_ch, main = "Edad vs Gasto", xlab = "Edad", ylab = "Gasto", pch = 20, col = rgb(0,0,0,0.3))
-lines(lowess(df_og$edad, df_og$gasto_ch), col = "red", lwd = 2)
+plot(tabla_gasto$edad, tabla_gasto$gasto_ch, main = "Edad vs Gasto", xlab = "Edad", ylab = "Gasto", pch = 20, col = rgb(0,0,0,0.3))
+lines(lowess(tabla_gasto$edad, tabla_gasto$gasto_ch), col = "red", lwd = 2)
 
-plot(df_og$ing_pc, df_og$gasto_ch, main = "Ingreso vs Gasto", xlab = "Ingreso per cápita", ylab = "Gasto", pch = 20, col = rgb(0,0,0,0.3))
-lines(lowess(df_og$ing_pc, df_og$gasto_ch), col = "blue", lwd = 2)
+plot(tabla_gasto$ing_pc, tabla_gasto$gasto_ch, main = "Ingreso vs Gasto", xlab = "Ingreso per cápita", ylab = "Gasto", pch = 20, col = rgb(0,0,0,0.3))
+lines(lowess(tabla_gasto$ing_pc, tabla_gasto$gasto_ch), col = "blue", lwd = 2)
 
 # Escolaridad agrupada
-df_og$grupo_escolaridad <- cut(df_og$edue, breaks = c(-Inf, 8, 12, 16, Inf), labels = c("Básica o menos", "Media-baja", "Media-alta", "Alta"), right = TRUE)
+tabla_gasto$grupo_escolaridad <- cut(tabla_gasto$edue, breaks = c(-Inf, 8, 12, 16, Inf), labels = c("Básica o menos", "Media-baja", "Media-alta", "Alta"), right = TRUE)
 
 # Boxplot según grupo de escolaridad
-boxplot(gasto_ch ~ grupo_escolaridad, data = df_og, main = "Gasto según Escolaridad", xlab = "Escolaridad", col = "skyblue")
+boxplot(gasto_ch ~ grupo_escolaridad, data = tabla_gasto, main = "Gasto según Escolaridad", xlab = "Escolaridad", col = "skyblue")
+
 
 # --- DETECCIÓN Y ELIMINACIÓN DE OUTLIERS (basado en IQR) ---
 limpiar_outliers <- function(x) {
@@ -76,7 +77,7 @@ limpiar_outliers <- function(x) {
 }
 
 # Aplicar limpieza a cada variable numérica
-filtros <- with(df_og, 
+filtros <- with(tabla_gasto, 
                 limpiar_outliers(edad) &
                   limpiar_outliers(edue) &
                   limpiar_outliers(ing_pc) &
@@ -84,16 +85,12 @@ filtros <- with(df_og,
 )
 
 # Crear nuevo dataframe limpio
-df <- df_og[filtros, ]
-
-# Opcional: ver número de observaciones removidas
-cat("Observaciones originales:", nrow(df_og), "\n")
-cat("Observaciones después de limpieza:", nrow(df), "\n")
+tabla_limpia <- tabla_gasto[filtros, ]
 
 # Matriz correlación
 # Creación de data frame y matriz de correlación
-df_r <- data.frame(df$gasto_ch, df$edad, df$edue, df$ing_pc, df$sexo)
-correlation_matrix <- cor(df_r, use = "complete.obs", method = "pearson")
+corr <- data.frame(df$gasto_ch, df$edad, df$edue, df$ing_pc, df$sexo)
+correlation_matrix <- cor(corr, use = "complete.obs", method = "pearson")
 #Gráfica
 corrplot(correlation_matrix, method = "color", tl.cex = 0.8, number.cex = 0.7)
 
