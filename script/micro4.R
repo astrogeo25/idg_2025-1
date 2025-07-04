@@ -1,30 +1,16 @@
 # 1. Librerías
-# Para simular
-library(rakeR)
 library(RPostgres)
 library(DBI)
 library(ggplot2)
-# Para generar mapas bivariados
-library(biscale)
-library(cowplot)
-library(sf)
 
 # 2. Entradas
 
-## df del censo ya procesado
-cons_censo_df <- readRDS("data/cons_censo_df.rds")
 casen_raw = readRDS("data/casen_rm.rds") 
 
 # 3. Preprocesamiento
 
-## 3.1 CENSO
-col_cons   = sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
-age_levels  = grep("^edad", col_cons, value = TRUE)
-esc_levels  = grep("^esco", col_cons, value = TRUE)
-sexo_levels = grep("^sexo_",col_cons, value = TRUE)
-
 ## 3.2 CASEN
-vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")
+vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "ypc")
 casen = casen_raw[ , vars_base, drop = FALSE]
 rm(casen_raw)
 
@@ -36,8 +22,6 @@ casen$edad = as.integer(unclass(casen$edad))
 casen$e6a = as.numeric(unclass(casen$e6a))
 casen$sexo = as.integer(unclass(casen$sexo))
 casen$ypc = as.integer(unclass(casen$ypc))
-casen$h7a = as.numeric(unclass(casen$h7a))
-casen$h7a <- ifelse(casen$h7a == 1, 1, 0)  # 1 sano, 0 con problemas
 
 idx_na = which(is.na(casen$esc))
 fit = lm(esc ~ e6a, data = casen[-idx_na,])
@@ -67,48 +51,9 @@ casen$sexo_cat <- factor(
   levels = sexo_levels
 )
 
-# 4. Microsimulación
-cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
-inds_list = split(casen, casen$Comuna)
 
-sim_list = lapply(names(cons_censo_comunas), function(zona) {
-  cons_i    = cons_censo_comunas[[zona]]
-  col_order = sort(setdiff(names(cons_i), c("COMUNA","GEOCODIGO")))
-  cons_i    = cons_i[, c("GEOCODIGO", col_order), drop = FALSE]
-  
-  tmp    = inds_list[[zona]]
-  inds_i = tmp[, c("ID","edad_cat","esc_cat","sexo_cat"), drop = FALSE]
-  names(inds_i) = c("ID","Edad","Escolaridad","Sexo")
-  
-  w_frac  = weight(cons = cons_i, inds = inds_i,
-                   vars = c("Edad","Escolaridad","Sexo"))
-  sim_i   = integerise(weights = w_frac, inds = inds_i, seed = 123)
-  
-  merge(sim_i,
-        tmp[, c("ID","h7a","edad")],  # ahora incluye edad
-        by = "ID", all.x = TRUE)
-})
 
-sim_df = data.table::rbindlist(sim_list, idcol = "COMUNA")
 
-# 4.1 Cálculo de métricas
-
-zonas_stats <- aggregate(
-  cbind(h7a, edad) ~ zone,
-  data = sim_df,
-  FUN = function(x) x
-)
-
-zonas_stats <- within(zonas_stats, {
-  pct_problemas_vision = round(100 * sapply(h7a, function(x) sum(x == 0, na.rm = TRUE) / length(x)), 2)
-  pct_mayores_60 = round(100 * sapply(edad, function(x) sum(x >= 60, na.rm = TRUE) / length(x)), 2)
-})
-
-zonas_stats_df <- data.frame(
-  geocodigo = zonas_stats$zone,
-  pct_problemas_vision = zonas_stats$pct_problemas_vision,
-  pct_mayores_60 = zonas_stats$pct_mayores_60
-)
 
 # 5. Conexión con Postgres
 con <- dbConnect(
