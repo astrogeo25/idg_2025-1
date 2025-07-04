@@ -100,9 +100,16 @@ modelo_gam <- gam(log_gasto ~ s(ing_pc) + s(edad) + sexo + grupo_escolaridad, da
 summary(modelo_gam)
 plot(modelo_gam, se = TRUE)
 
+# --- FILTRAR 99% GASTOS
+q99 <- quantile(tabla_gasto$gasto_ch, 0.99)
+tabla_filtrada <- subset(tabla_gasto, gasto_ch <= q99)
+
+modelo_lineal_f <- lm(gasto_ch ~ edue + ing_pc, data = tabla_filtrada)
+summary(modelo_lineal_f)
+
 # --- SEGMENTAR GASTO
-modelo_hombres <- lm(log_gasto ~ edue + ing_pc, data = subset(tabla_gasto, sexo == 1))
-modelo_mujeres <- lm(log_gasto ~ edue + ing_pc, data = subset(tabla_gasto, sexo == 2))
+modelo_hombres <- lm(log_gasto ~ edue + ing_pc, data = subset(tabla_filtrada, sexo == 1))
+modelo_mujeres <- lm(log_gasto ~ edue + ing_pc, data = subset(tabla_filtrada, sexo == 2))
 
 summary(modelo_hombres)
 summary(modelo_mujeres)
