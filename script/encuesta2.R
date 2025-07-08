@@ -88,12 +88,6 @@ boxplot(gasto_ch ~ grupo_escolaridad, data = tabla_gasto,
 modelo_lineal <- lm(gasto_ch ~ edue + ing_pc + sexo, data = tabla_gasto)
 summary(modelo_lineal)
 
-# --- MODELO LOGÍSTICO: Probabilidad de incurrir en gasto ---
-modelo_data <- subset(personas_gs, !is.na(edad) & !is.na(grupo_escolaridad) & !is.na(sexo))
-modelo_logit <- glm(incurre_gasto ~ factor(sexo) + edad + grupo_escolaridad,
-                    data = modelo_data, family = binomial)
-summary(modelo_logit)
-
 # --- MODELO GAM
 library(mgcv)
 modelo_gam <- gam(log_gasto ~ s(ing_pc) + s(edad) + sexo + grupo_escolaridad, data = tabla_gasto)
@@ -150,3 +144,28 @@ plot(modelo_gam, residuals = TRUE, shade = TRUE)
 # 6. Modelo logístico (probabilidad de incurrir en gasto)
 cat("\n--- ANOVA: Modelo Logístico ---\n")
 anova(modelo_logit, test = "Chisq")
+
+# ANALISIS MODELO LOGIT
+# Cargar las librerías necesarias
+library(pROC)
+library(caret)
+
+# Modelo logístico
+modelo_data <- subset(personas_gs, !is.na(edad) & !is.na(grupo_escolaridad) & !is.na(sexo))
+modelo_logit <- glm(incurre_gasto ~ factor(sexo) + edad + grupo_escolaridad,
+                    data = modelo_data, family = binomial)
+
+# Predicciones de probabilidad
+predicciones_prob <- predict(modelo_logit, type = "response")
+
+# Curva ROC
+roc_curve <- roc(modelo_data$incurre_gasto, predicciones_prob)
+plot(roc_curve, main = "Curva ROC del modelo logístico")
+print(paste("AUC: ", auc(roc_curve)))
+
+# Predicciones de clase (umbral 0.5)
+predicciones_clase <- ifelse(predicciones_prob > 0.5, 1, 0)
+
+# Matriz de confusión
+conf_matrix <- confusionMatrix(factor(predicciones_clase), factor(modelo_data$incurre_gasto))
+print(conf_matrix)
