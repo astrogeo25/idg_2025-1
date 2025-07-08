@@ -113,3 +113,40 @@ modelo_mujeres <- lm(log_gasto ~ edue + ing_pc, data = subset(tabla_filtrada, se
 
 summary(modelo_hombres)
 summary(modelo_mujeres)
+
+# --- ANALISIS ANOVA
+# --- ANÁLISIS ANOVA Y GRÁFICOS DE RESIDUOS ---
+
+# 1. Modelo lineal original (quienes incurren en gasto)
+cat("\n--- ANOVA: Modelo Lineal original ---\n")
+anova(modelo_lineal)
+par(mfrow = c(1, 2))
+plot(modelo_lineal)
+
+# 2. Modelo lineal con filtrado del 99% superior del gasto
+cat("\n--- ANOVA: Modelo Lineal filtrado 99% ---\n")
+anova(modelo_lineal_f)
+par(mfrow = c(1, 2))
+plot(modelo_lineal_f)
+
+# 3. Modelo por sexo: Hombres
+cat("\n--- ANOVA: Modelo Lineal Hombres (log gasto) ---\n")
+anova(modelo_hombres)
+par(mfrow = c(1, 2))
+plot(modelo_hombres)
+
+# 4. Modelo por sexo: Mujeres
+cat("\n--- ANOVA: Modelo Lineal Mujeres (log gasto) ---\n")
+anova(modelo_mujeres)
+par(mfrow = c(1, 2))
+plot(modelo_mujeres)
+
+# 5. Modelo GAM (log del gasto)
+cat("\n--- ANOVA: Modelo GAM (log gasto) ---\n")
+anova(modelo_gam)
+par(mfrow = c(1, 2))
+plot(modelo_gam, residuals = TRUE, shade = TRUE)
+
+# 6. Modelo logístico (probabilidad de incurrir en gasto)
+cat("\n--- ANOVA: Modelo Logístico ---\n")
+anova(modelo_logit, test = "Chisq")
