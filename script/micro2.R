@@ -11,6 +11,8 @@ library(rakeR)
 
 # 2. Entradas
 
+
+
 ## df del censo ya procesado
 cons_censo_df <- readRDS("cons_censo_df.rds")
 casen_raw = readRDS("casen_rm.rds") 

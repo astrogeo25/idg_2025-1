@@ -3,11 +3,11 @@ library(RPostgres)
 library(DBI)
 library(ggplot2)
 library(rakeR)
-library(data.table)  # Para mejorar rendimiento
+library(data.table) 
 
 # 2. Entradas
 cons_censo_df <- readRDS("data/cons_censo_df.rds")
-casen <- readRDS("data/casen_rm.rds")[, c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")]
+casen <- as.data.table(readRDS("data/casen_rm.rds")[, c("estrato", "esc", "edad", "sexo", "e6a", "ypc")])
 
 # 3. Preprocesamiento
 ## 3.1 Variables del Censo
@@ -25,8 +25,7 @@ casen[, `:=`(
   edad = as.numeric(edad),
   e6a = as.numeric(e6a),
   sexo = as.integer(sexo),
-  ypc = as.numeric(ypc),
-  h7a = as.integer(h7a %in% c(1, 2))
+  ypc = as.numeric(ypc)
 )]
 
 # Imputación de ESC
@@ -66,37 +65,7 @@ sim_list <- lapply(names(cons_list), function(zona) {
   w_frac <- weight(cons = cons_i, inds = inds_i, vars = c("Edad", "Escolaridad", "Sexo"))
   sim_i <- integerise(weights = w_frac, inds = inds_i, seed = 123)
   
-  merge(sim_i, tmp[, .(ID, h7a, edad, ypc)], by = "ID", all.x = TRUE)
+  merge(sim_i, tmp[, .(ID, ypc)], by = "ID", all.x = TRUE) # Agregar variables simuladas
 })
 
 sim_df <- rbindlist(sim_list, idcol = "COMUNA", use.names = TRUE, fill = TRUE)
-
-# Crear índice para acelerar joins
-dbExecute(con, "CREATE INDEX ON dpa.tmp_audicion_rm(geocodigo)")
-dbExecute(con, "ANALYZE dpa.tmp_audicion_rm")
-
-dbExecute(con, "
-  CREATE TABLE IF NOT EXISTS dpa.zonas_audicion AS
-  SELECT
-    z.*,
-    t.audicion
-  FROM dpa.zonas_censales_rm AS z
-  LEFT JOIN dpa.tmp_audicion_rm AS t
-    ON z.geocodigo::text = t.geocodigo
-WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
-")
-
-zonas_audicion_sf <- st_read(con, query = "
-  SELECT * FROM dpa.zonas_audicion
-")
-
-# 6. Generar mapa
-ggplot(zonas_audicion_sf) +
-  geom_sf(aes(fill = audicion), color = "black", size = 0.2) +
-  scale_fill_gradient(low = "lightyellow", high = "darkgreen", na.value = "grey90",
-                      name = "Problemas de Audición (%)") +
-  theme_minimal() +
-  labs(title = "Mapa de Problemas de Audición en la Región Metropolitana",
-       subtitle = "Porcentaje de personas con dificultades auditivas por zona censal") +
-  theme(axis.text = element_blank(),
-        axis.ticks = element_blank())

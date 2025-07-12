@@ -31,7 +31,6 @@ vars_base = c("estrato", # Para extraer la comuna
               "e6a",
               "h7b") # Variable a microsimular
 
-
 # Se filtra la CASEN con las variables de interés
 casen = casen_raw[ , vars_base, drop = FALSE]
 
