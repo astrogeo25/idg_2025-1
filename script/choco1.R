@@ -53,6 +53,61 @@ personas_gs$grupo_escolaridad <- cut(
 tabla_gasto <- subset(personas_gs, gasto_ch > 0)
 tabla_gasto <- tabla_gasto[, c("sexo", "edad", "edue", "ing_pc", "gasto_ch", "grupo_escolaridad")]
 
+# --- MODELO LINEAL: Quienes incurren en gasto ---
+modelo_lineal <- lm(log(gasto_ch) ~ edue + ing_pc + sexo, data = tabla_gasto)
+summary(modelo_lineal)
+
+# --- FILTRAR 99% GASTOS
+q99 <- quantile(tabla_gasto$gasto_ch, 0.99)
+tabla_filtrada <- subset(tabla_gasto, gasto_ch <= q99)
+
+modelo_lineal_f <- lm(log(gasto_ch) ~ edue + ing_pc, data = tabla_filtrada)
+summary(modelo_lineal_f)
+
+# --- ANALISIS ANOVA
+# --- ANÁLISIS ANOVA Y GRÁFICOS DE RESIDUOS ---
+
+# 1. Modelo lineal original (quienes incurren en gasto)
+cat("\n--- ANOVA: Modelo Lineal original ---\n")
+anova(modelo_lineal)
+par(mfrow = c(1, 2))
+plot(modelo_lineal)
+
+# 2. Modelo lineal con filtrado del 99% superior del gasto
+cat("\n--- ANOVA: Modelo Lineal filtrado 99% ---\n")
+anova(modelo_lineal_f)
+par(mfrow = c(1, 2))
+plot(modelo_lineal_f)
+
+# 6. Modelo logístico (probabilidad de incurrir en gasto)
+cat("\n--- ANOVA: Modelo Logístico ---\n")
+anova(modelo_logit, test = "Chisq")
+
+# ANALISIS MODELO LOGIT
+# Cargar las librerías necesarias
+library(pROC)
+library(caret)
+
+# Modelo logístico
+modelo_data <- subset(personas_gs, !is.na(edad) & !is.na(grupo_escolaridad) & !is.na(sexo))
+modelo_logit <- glm(incurre_gasto ~ factor(sexo) + edad + grupo_escolaridad,
+                    data = modelo_data, family = binomial)
+
+# Predicciones de probabilidad
+predicciones_prob <- predict(modelo_logit, type = "response")
+
+# Curva ROC
+roc_curve <- roc(modelo_data$incurre_gasto, predicciones_prob)
+plot(roc_curve, main = "Curva ROC del modelo logístico")
+print(paste("AUC: ", auc(roc_curve)))
+
+# Predicciones de clase (umbral 0.5)
+predicciones_clase <- ifelse(predicciones_prob > 0.5, 1, 0)
+
+# Matriz de confusión
+conf_matrix <- confusionMatrix(factor(predicciones_clase), factor(modelo_data$incurre_gasto))
+print(conf_matrix)
+
 # --- GRAFICOS EXPLORATORIOS ---
 # DISTRIBUCIÓN DEL INGRESO
 hist(tabla_gasto$ing_pc, breaks = 30, col = "lightblue",
@@ -83,89 +138,3 @@ lines(lowess(tabla_gasto$ing_pc, tabla_gasto$gasto_ch), col = "blue", lwd = 2)
 boxplot(gasto_ch ~ grupo_escolaridad, data = tabla_gasto,
         main = "Gasto según Escolaridad", xlab = "Escolaridad",
         col = "skyblue")
-
-# --- MODELO LINEAL: Quienes incurren en gasto ---
-modelo_lineal <- lm(gasto_ch ~ edue + ing_pc + sexo, data = tabla_gasto)
-summary(modelo_lineal)
-
-# --- MODELO GAM
-library(mgcv)
-modelo_gam <- gam(log_gasto ~ s(ing_pc) + s(edad) + sexo + grupo_escolaridad, data = tabla_gasto)
-summary(modelo_gam)
-plot(modelo_gam, se = TRUE)
-
-# --- FILTRAR 99% GASTOS
-q99 <- quantile(tabla_gasto$gasto_ch, 0.99)
-tabla_filtrada <- subset(tabla_gasto, gasto_ch <= q99)
-
-modelo_lineal_f <- lm(gasto_ch ~ edue + ing_pc, data = tabla_filtrada)
-summary(modelo_lineal_f)
-
-# --- SEGMENTAR GASTO
-modelo_hombres <- lm(log_gasto ~ edue + ing_pc, data = subset(tabla_filtrada, sexo == 1))
-modelo_mujeres <- lm(log_gasto ~ edue + ing_pc, data = subset(tabla_filtrada, sexo == 2))
-
-summary(modelo_hombres)
-summary(modelo_mujeres)
-
-# --- ANALISIS ANOVA
-# --- ANÁLISIS ANOVA Y GRÁFICOS DE RESIDUOS ---
-
-# 1. Modelo lineal original (quienes incurren en gasto)
-cat("\n--- ANOVA: Modelo Lineal original ---\n")
-anova(modelo_lineal)
-par(mfrow = c(1, 2))
-plot(modelo_lineal)
-
-# 2. Modelo lineal con filtrado del 99% superior del gasto
-cat("\n--- ANOVA: Modelo Lineal filtrado 99% ---\n")
-anova(modelo_lineal_f)
-par(mfrow = c(1, 2))
-plot(modelo_lineal_f)
-
-# 3. Modelo por sexo: Hombres
-cat("\n--- ANOVA: Modelo Lineal Hombres (log gasto) ---\n")
-anova(modelo_hombres)
-par(mfrow = c(1, 2))
-plot(modelo_hombres)
-
-# 4. Modelo por sexo: Mujeres
-cat("\n--- ANOVA: Modelo Lineal Mujeres (log gasto) ---\n")
-anova(modelo_mujeres)
-par(mfrow = c(1, 2))
-plot(modelo_mujeres)
-
-# 5. Modelo GAM (log del gasto)
-cat("\n--- ANOVA: Modelo GAM (log gasto) ---\n")
-anova(modelo_gam)
-par(mfrow = c(1, 2))
-plot(modelo_gam, residuals = TRUE, shade = TRUE)
-
-# 6. Modelo logístico (probabilidad de incurrir en gasto)
-cat("\n--- ANOVA: Modelo Logístico ---\n")
-anova(modelo_logit, test = "Chisq")
-
-# ANALISIS MODELO LOGIT
-# Cargar las librerías necesarias
-library(pROC)
-library(caret)
-
-# Modelo logístico
-modelo_data <- subset(personas_gs, !is.na(edad) & !is.na(grupo_escolaridad) & !is.na(sexo))
-modelo_logit <- glm(incurre_gasto ~ factor(sexo) + edad + grupo_escolaridad,
-                    data = modelo_data, family = binomial)
-
-# Predicciones de probabilidad
-predicciones_prob <- predict(modelo_logit, type = "response")
-
-# Curva ROC
-roc_curve <- roc(modelo_data$incurre_gasto, predicciones_prob)
-plot(roc_curve, main = "Curva ROC del modelo logístico")
-print(paste("AUC: ", auc(roc_curve)))
-
-# Predicciones de clase (umbral 0.5)
-predicciones_clase <- ifelse(predicciones_prob > 0.5, 1, 0)
-
-# Matriz de confusión
-conf_matrix <- confusionMatrix(factor(predicciones_clase), factor(modelo_data$incurre_gasto))
-print(conf_matrix)

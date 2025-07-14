@@ -7,7 +7,7 @@ library(data.table)  # Para mejorar rendimiento
 
 # 2. Entradas
 cons_censo_df <- readRDS("data/cons_censo_df.rds")
-casen <- readRDS("data/casen_rm.rds")[, c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")]
+casen <- as.data.table(readRDS("data/casen_rm.rds")[, c("estrato", "esc", "edad", "sexo", "e6a", "ypc", "h7a")])
 
 # 3. Preprocesamiento
 ## 3.1 Variables del Censo
