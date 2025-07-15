@@ -89,7 +89,6 @@ modelo_data$prob_predicha <- predict(modelo_logit, type = "response")
 
 # --- CURVA ROC Y ÁREA BAJO LA CURVA (AUC) ---
 # Evaluamos la capacidad discriminativa del modelo
-library(pROC)
 roc_obj <- roc(modelo_data$incurre_gasto, modelo_data$prob_predicha)
 #plot(roc_obj, col = "blue", main = "Curva ROC")
 # cat("AUC:", auc(roc_obj), "\n")
@@ -251,7 +250,7 @@ casen_pred <- casen[casen$clasificacion == 1, ]
 # Predecir en escala log
 casen_pred$log_gasto_estimado <- predict(modelo_lineal, newdata = casen_pred)
 
-# Volver a escala natural (como usaste log(gasto + 1))
+# Volver a escala natural (log(gasto + 1))
 casen_pred$gasto_estimado <- exp(casen_pred$log_gasto_estimado) - 1
 
 # Controlar outliers (Winzorización)
