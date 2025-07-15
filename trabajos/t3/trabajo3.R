@@ -63,37 +63,6 @@ tabla_gasto$rango_edad <- cut(tabla_gasto$edad,
                               labels = c("jovenes", "adultos_jovenes", "adultos", "adultos_mayores")
 )
 
-# --- GRAFICOS EXPLORATORIOS ---
-# DISTRIBUCIÓN DEL INGRESO
-hist(tabla_gasto$ing_pc, breaks = 30, col = "lightblue",
-     main = "Distribución del Ingreso", xlab = "Ingreso per cápita")
-
-# DISTRIBUCIÓN DEL GASTO EN chocolate
-hist(tabla_gasto$gasto_chocolate, breaks = 30, col = "lightblue",
-     main = "Distribución del Gasto en chocolate", xlab = "Gasto en chocolate")
-
-# GASTO EN chocolate SEGÚN SEXO
-boxplot(gasto_chocolate ~ factor(sexo), data = tabla_gasto,
-        main = "Gasto en chocolate según Sexo", xlab = "Sexo",
-        col = c("tomato", "lightgreen"))
-
-# GASTO EN FUNCIÓN DE LA EDAD
-plot(tabla_gasto$edad, tabla_gasto$gasto_chocolate,
-     main = "Edad vs Gasto en chocolate", xlab = "Edad", ylab = "Gasto",
-     pch = 20, col = rgb(0, 0, 0, 0.3))
-lines(lowess(tabla_gasto$edad, tabla_gasto$gasto_chocolate), col = "red", lwd = 2)
-
-# GASTO EN FUNCIÓN DEL INGRESO
-plot(tabla_gasto$ing_pc, tabla_gasto$gasto_chocolate,
-     main = "Ingreso vs Gasto en chocolate", xlab = "Ingreso per cápita", ylab = "Gasto",
-     pch = 20, col = rgb(0, 0, 0, 0.3))
-lines(lowess(tabla_gasto$ing_pc, tabla_gasto$gasto_chocolate), col = "blue", lwd = 2)
-
-# BOXPLOT GASTO SEGÚN ESCOLARIDAD
-boxplot(gasto_chocolate ~ grupo_escolaridad, data = tabla_gasto,
-        main = "Gasto en chocolate según Escolaridad", xlab = "Escolaridad",
-        col = "skyblue")
-
 # --- MODELO LINEAL: Quienes incurren en gasto ---
 modelo_lineal <- lm(log_gasto_chocolate ~ grupo_escolaridad + ing_pc + rango_edad + factor(sexo), data = tabla_gasto)
 summary(modelo_lineal)
@@ -119,8 +88,8 @@ modelo_data$prob_predicha <- predict(modelo_logit, type = "response")
 # Evaluamos la capacidad discriminativa del modelo
 library(pROC)
 roc_obj <- roc(modelo_data$incurre_gasto, modelo_data$prob_predicha)
-plot(roc_obj, col = "blue", main = "Curva ROC")
-cat("AUC:", auc(roc_obj), "\n")
+#plot(roc_obj, col = "blue", main = "Curva ROC")
+# cat("AUC:", auc(roc_obj), "\n")
 
 # --- CÁLCULO DEL UMBRAL ÓPTIMO (CRITERIO DE YOUDEN) ---
 
@@ -325,12 +294,92 @@ legend("topright", legend = c("EPF", "CASEN imputado"), col = c("blue", "red"), 
 # 1. Unir predicciones de gasto de CASEN a sim_df por ID
 
 # Seleccionamos solo columnas necesarias de casen_pred
-casen_pred_reduc <- casen_pred[, c("ID", "log_gasto_estimado", "gasto_estimado")]
+casen_pred_reduc <- casen_pred[, c("ID", "gasto_estimado")]
 
 # Unir con sim_df
 sim_df <- merge(sim_df, casen_pred_reduc, by = "ID", all.x = TRUE)
 
 # Si se desea, reemplazar NA por 0 para quienes no incurren en gasto
 sim_df$gasto_estimado[is.na(sim_df$gasto_estimado)] <- 0
-sim_df$log_gasto_estimado[is.na(sim_df$log_gasto_estimado)] <- 0  # o 0 si lo prefieres
 
+# Conexión Postgres
+library(RPostgres)
+library(DBI)
+con <- dbConnect(
+  Postgres(),
+  dbname = "censo_rm_2017",
+  host = "localhost",
+  port = 5432,
+  user = "postgres",
+  password = "postgres"
+)
+
+# Escribir tabla temporal con audición y geocodigo
+dbWriteTable(
+  conn = con,
+  name = Id(schema = "dpa", table = "tmp_chocolate_rm"),
+  value = sim_df,
+  overwrite = TRUE,
+  row.names = FALSE
+)
+
+# Crear índice para acelerar joins
+dbExecute(con, "CREATE INDEX ON dpa.tmp_chocolate_rm(zone)")
+dbExecute(con, "ANALYZE dpa.tmp_chocolate_rm")
+
+dbExecute(con, "
+  CREATE TABLE IF NOT EXISTS dpa.zonas_chocolate AS
+  SELECT
+    z.*,
+    t.gasto_estimado
+  FROM dpa.zonas_censales_rm AS z
+  LEFT JOIN dpa.tmp_chocolate_rm AS t
+    ON z.geocodigo::text = t.zone
+WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
+")
+library(sf)
+zonas_chocolate_sf <- st_read(con, query = "
+  SELECT * FROM dpa.zonas_chocolate
+")
+
+ggplot(zonas_chocolate_sf) +
+  geom_sf(aes(fill = gasto_estimado), color = "black", size = 0.2) +
+  scale_fill_gradient(low = "lightyellow", high = "red", na.value = "grey90",
+                      name = "Problemas de Audición (%)") +
+  theme_minimal() +
+  labs(title = "Mapa de gasto en chocolatelate en la Región Metropolitana",
+       subtitle = "Gasto en chocolate") +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+
+# --- GRAFICOS EXPLORATORIOS ---
+# DISTRIBUCIÓN DEL INGRESO
+hist(tabla_gasto$ing_pc, breaks = 30, col = "lightblue",
+     main = "Distribución del Ingreso", xlab = "Ingreso per cápita")
+
+# DISTRIBUCIÓN DEL GASTO EN chocolate
+hist(tabla_gasto$gasto_chocolate, breaks = 30, col = "lightblue",
+     main = "Distribución del Gasto en chocolate", xlab = "Gasto en chocolate")
+
+# GASTO EN chocolate SEGÚN SEXO
+boxplot(gasto_chocolate ~ factor(sexo), data = tabla_gasto,
+        main = "Gasto en chocolate según Sexo", xlab = "Sexo",
+        col = c("tomato", "lightgreen"))
+
+# GASTO EN FUNCIÓN DE LA EDAD
+plot(tabla_gasto$edad, tabla_gasto$gasto_chocolate,
+     main = "Edad vs Gasto en chocolate", xlab = "Edad", ylab = "Gasto",
+     pch = 20, col = rgb(0, 0, 0, 0.3))
+lines(lowess(tabla_gasto$edad, tabla_gasto$gasto_chocolate), col = "red", lwd = 2)
+
+# GASTO EN FUNCIÓN DEL INGRESO
+plot(tabla_gasto$ing_pc, tabla_gasto$gasto_chocolate,
+     main = "Ingreso vs Gasto en chocolate", xlab = "Ingreso per cápita", ylab = "Gasto",
+     pch = 20, col = rgb(0, 0, 0, 0.3))
+lines(lowess(tabla_gasto$ing_pc, tabla_gasto$gasto_chocolate), col = "blue", lwd = 2)
+
+# BOXPLOT GASTO SEGÚN ESCOLARIDAD
+boxplot(gasto_chocolate ~ grupo_escolaridad, data = tabla_gasto,
+        main = "Gasto en chocolate según Escolaridad", xlab = "Escolaridad",
+        col = "skyblue")
