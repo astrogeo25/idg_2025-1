@@ -5,6 +5,8 @@ library(mgcv)
 library(ggplot2)
 library(corrplot)
 library(data.table)
+library(RPostgres)
+library(DBI)
 
 # --- CARGA DE DATOS EPF ---
 personas   <- read_dta("data/datos_epf/base-personas-ix-epf-stata.dta")
@@ -126,13 +128,14 @@ sensibilidad_opt <- TP_opt / (TP_opt + FN_opt)
 cat("Especificidad (umbral óptimo):", especificidad_opt, "\n")
 cat("Sensibilidad (umbral óptimo):", sensibilidad_opt, "\n")
 
-# 2. Entradas
+# --- LECTURA DEL CENSO/CASEN ---
+# Entradas
 
 ## df del censo ya procesado
 cons_censo_df <- readRDS("data/cons_censo_df.rds")
 casen_raw = readRDS("data/casen_rm.rds") 
 
-# 3. Preprocesamiento
+# Preprocesamiento
 
 ## 3.1 Extracción de variables del Censo
 col_cons   = sort(setdiff(names(cons_censo_df), c("GEOCODIGO","COMUNA")))
@@ -140,7 +143,7 @@ age_levels  = grep("^edad", col_cons, value = TRUE)
 esc_levels  = grep("^esco", col_cons, value = TRUE)
 sexo_levels = grep("^sexo_",col_cons, value = TRUE)
 
-## 3.2 Extracción de variables de la CASEN
+## Extracción de variables de la CASEN
 vars_base = c("estrato", "esc", "edad", "sexo", "e6a", "h7a", "ypc")
 casen = casen_raw[ , vars_base, drop = FALSE]
 rm(casen_raw)
@@ -185,7 +188,7 @@ casen$sexo_cat <- factor(
   levels = sexo_levels
 )
 
-# 4. Microsimulación
+# --- MICROSIMULACION ---
 cons_censo_comunas = split(cons_censo_df, cons_censo_df$COMUNA)
 inds_list = split(casen, casen$Comuna)
 sim_list = lapply(names(cons_censo_comunas), function(zona) {
@@ -263,7 +266,7 @@ plot(density(tabla_gasto$gasto_chocolate), col = "blue", lwd = 2, main = "Densid
 lines(density(casen_pred$gasto_estimado_wins), col = "red", lwd = 2)
 legend("topright", legend = c("EPF", "CASEN imputado"), col = c("blue", "red"), lwd = 2)
 
-# 1. Unir predicciones de gasto de CASEN a sim_df por ID
+# --- UNIR PREDICCIONES ---
 
 # Seleccionamos solo columnas necesarias de casen_pred
 casen_pred_reduc <- casen_pred[, c("ID", "gasto_estimado")]
@@ -274,9 +277,8 @@ sim_df <- merge(sim_df, casen_pred_reduc, by = "ID", all.x = TRUE)
 # Si se desea, reemplazar NA por 0 para quienes no incurren en gasto
 sim_df$gasto_estimado[is.na(sim_df$gasto_estimado)] <- 0
 
-# Conexión Postgres
-library(RPostgres)
-library(DBI)
+# --- CONEXION POSTGRES Y MAPA ---
+
 con <- dbConnect(
   Postgres(),
   dbname = "censo_rm_2017",
