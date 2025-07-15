@@ -7,6 +7,7 @@ library(corrplot)
 library(data.table)
 library(RPostgres)
 library(DBI)
+library(sf)
 
 # --- CARGA DE DATOS EPF ---
 personas   <- read_dta("data/datos_epf/base-personas-ix-epf-stata.dta")
@@ -311,11 +312,12 @@ dbExecute(con, "
     ON z.geocodigo::text = t.zone
 WHERE urbano = 1 AND (nom_provin = 'SANTIAGO' OR nom_comuna = 'SAN BERNARDO' OR nom_comuna = 'PUENTE ALTO')
 ")
-library(sf)
+
 zonas_chocolate_sf <- st_read(con, query = "
   SELECT * FROM dpa.zonas_chocolate
 ")
 
+# Mapa
 ggplot(zonas_chocolate_sf) +
   geom_sf(aes(fill = gasto_estimado), color = "black", size = 0.2) +
   scale_fill_gradient(low = "lightyellow", high = "red", na.value = "grey90",
